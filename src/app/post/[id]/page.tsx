@@ -103,7 +103,7 @@ export default function PostDetailPage({
       : null);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black text-black dark:text-white font-sans flex flex-col selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black">
+    <div key={id} className="min-h-screen bg-white dark:bg-black text-black dark:text-white font-sans flex flex-col selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black">
       <Header
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenProfile={(pubkey) => setProfilePubkey(pubkey || null)}
