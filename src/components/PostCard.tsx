@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { formatTimeAgo } from "@/lib/utils";
 import { useIdentity } from "@/lib/useIdentity";
 import { pubkeyToFriendlyName, getAuthorInitials } from "@/lib/nameGenerator";
@@ -128,9 +129,12 @@ export function PostCard({
 
   return (
     <article
-      onClick={() => {
-        if (!isThreadView && onViewThread) {
-          onViewThread(post);
+      onClick={(e) => {
+        const target = e.target as HTMLElement;
+        if (!isThreadView && !target.closest("button") && !target.closest("a")) {
+          if (onViewThread) {
+            onViewThread(post);
+          }
         }
       }}
       className={`border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-black p-4 transition-all ${
@@ -262,18 +266,15 @@ export function PostCard({
           )}
         </div>
 
-        {!isThreadView && onViewThread && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewThread(post);
-            }}
-            className="hover:text-black dark:hover:text-white transition-colors p-0.5"
+        {!isThreadView && (
+          <Link
+            href={`/post/${post.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="hover:text-black dark:hover:text-white transition-colors p-1"
             title="View thread"
           >
             <ChevronRight className="w-4 h-4" />
-          </button>
+          </Link>
         )}
       </div>
     </article>
