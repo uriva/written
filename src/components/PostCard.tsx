@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { formatShortKey } from "@/lib/crypto";
 import { formatTimeAgo } from "@/lib/utils";
 import { useIdentity } from "@/lib/useIdentity";
+import { pubkeyToFriendlyName, getAuthorInitials } from "@/lib/nameGenerator";
 import {
   MessageSquare,
   Edit2,
@@ -64,12 +64,12 @@ export function PostCard({
   const isEdited = Boolean(post.updatedAt && post.updatedAt > post.createdAt);
 
   const displayName = isSigned
-    ? post.profile?.name || `@${formatShortKey(post.authorPubkey)}`
+    ? post.profile?.name || pubkeyToFriendlyName(post.authorPubkey)
     : "Anonymous";
 
   const initials = isSigned
-    ? (post.profile?.name || post.authorPubkey || "U").slice(0, 2).toUpperCase()
-    : "∅";
+    ? getAuthorInitials(displayName)
+    : "A";
 
   // Render content with interactive hashtags and links
   const renderFormattedContent = (text: string) => {
@@ -96,7 +96,7 @@ export function PostCard({
               e.stopPropagation();
               if (onSelectTag) onSelectTag(tagName);
             }}
-            className="font-mono text-black dark:text-white font-medium bg-neutral-100 dark:bg-neutral-800 px-1 py-0.5 hover:underline cursor-pointer transition-colors"
+            className="text-neutral-900 dark:text-neutral-100 font-semibold hover:underline cursor-pointer"
           >
             {token}
           </button>
@@ -140,7 +140,7 @@ export function PostCard({
       }`}
     >
       {/* Post Header */}
-      <div className="flex items-center justify-between gap-3 mb-2">
+      <div className="flex items-center justify-between gap-3 mb-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
           {/* Avatar */}
           {isSigned ? (
@@ -152,7 +152,7 @@ export function PostCard({
                   onViewAuthorProfile(post.authorPubkey);
                 }
               }}
-              className="w-7 h-7 rounded-full bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 flex items-center justify-center font-mono font-bold text-xs shrink-0 hover:opacity-80 transition-opacity"
+              className="w-8 h-8 rounded-full bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 flex items-center justify-center font-semibold text-xs shrink-0 hover:opacity-85 transition-opacity"
               title="View profile"
             >
               {post.profile?.avatar ? (
@@ -167,10 +167,10 @@ export function PostCard({
             </button>
           ) : (
             <div
-              className="w-7 h-7 rounded-full border border-neutral-300 dark:border-neutral-700 text-neutral-400 flex items-center justify-center font-mono text-xs shrink-0"
+              className="w-8 h-8 rounded-full border border-neutral-300 dark:border-neutral-700 text-neutral-400 flex items-center justify-center text-xs shrink-0 font-medium"
               title="Anonymous"
             >
-              ∅
+              A
             </div>
           )}
 
@@ -185,16 +185,16 @@ export function PostCard({
                     onViewAuthorProfile(post.authorPubkey);
                   }
                 }}
-                className="font-medium text-sm text-black dark:text-white hover:underline truncate focus:outline-none flex items-center gap-1"
+                className="font-semibold text-[15px] text-neutral-900 dark:text-neutral-100 hover:underline truncate focus:outline-none flex items-center gap-1"
               >
                 <span>{displayName}</span>
                 <CheckCircle2
                   className="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400 shrink-0"
-                  aria-label="Signed author"
+                  aria-label="Verified sign"
                 />
               </button>
             ) : (
-              <span className="text-sm text-neutral-500 font-medium">
+              <span className="font-semibold text-[15px] text-neutral-500">
                 Anonymous
               </span>
             )}
@@ -210,7 +210,7 @@ export function PostCard({
         </div>
 
         {/* Timestamp & Edited status */}
-        <div className="flex items-center gap-1 text-xs text-neutral-400 shrink-0 font-mono">
+        <div className="flex items-center gap-1.5 text-xs text-neutral-400 shrink-0">
           {isEdited && (
             <span
               className="italic text-neutral-400"
@@ -225,13 +225,13 @@ export function PostCard({
         </div>
       </div>
 
-      {/* Post Body */}
-      <div className="text-sm font-sans text-neutral-900 dark:text-neutral-100 whitespace-pre-wrap break-words leading-relaxed my-2">
+      {/* Post Body - Large, highly legible, readable */}
+      <div className="text-[15px] sm:text-base text-neutral-900 dark:text-neutral-100 whitespace-pre-wrap break-words leading-relaxed my-2">
         {renderFormattedContent(post.content)}
       </div>
 
       {/* Actions Bar */}
-      <div className="flex items-center justify-between pt-2 border-t border-neutral-100 dark:border-neutral-900 text-xs text-neutral-500">
+      <div className="flex items-center justify-between pt-2.5 border-t border-neutral-100 dark:border-neutral-900 text-xs text-neutral-500">
         <div className="flex items-center gap-4">
           {onReply && (
             <button
@@ -254,7 +254,7 @@ export function PostCard({
                 e.stopPropagation();
                 onEdit(post);
               }}
-              className="flex items-center gap-1 hover:text-black dark:hover:text-white transition-colors"
+              className="flex items-center gap-1 hover:text-black dark:hover:text-white transition-colors font-medium"
             >
               <Edit2 className="w-3 h-3" />
               <span>Edit</span>
@@ -269,7 +269,7 @@ export function PostCard({
               e.stopPropagation();
               onViewThread(post);
             }}
-            className="hover:text-black dark:hover:text-white transition-colors flex items-center gap-0.5"
+            className="hover:text-black dark:hover:text-white transition-colors flex items-center gap-0.5 text-xs"
           >
             <span>Thread</span>
             <ChevronRight className="w-3.5 h-3.5" />

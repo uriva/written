@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useIdentity } from "@/lib/useIdentity";
-import { formatShortKey, buildProfileCanonicalMessage, signPayload } from "@/lib/crypto";
+import { buildProfileCanonicalMessage, signPayload } from "@/lib/crypto";
+import { pubkeyToFriendlyName, getAuthorInitials } from "@/lib/nameGenerator";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -238,7 +239,7 @@ export function ProfileModal({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-base text-black dark:text-white truncate">
-                    {profileData?.profile?.name || `@${formatShortKey(pubkey)}`}
+                    {profileData?.profile?.name || pubkeyToFriendlyName(pubkey)}
                   </h3>
                   {isOwner && (
                     <span className="font-mono text-[9px] uppercase px-1.5 py-0.5 bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-neutral-500">
@@ -253,18 +254,17 @@ export function ProfileModal({
                   </p>
                 )}
 
-                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-neutral-400 font-mono">
-                  <span>@{formatShortKey(pubkey)}</span>
+                <div className="mt-2 flex items-center gap-2">
                   <button
                     onClick={handleCopyPubkey}
-                    className="hover:text-black dark:hover:text-white p-0.5"
-                    title="Copy identifier"
+                    className="text-xs text-neutral-500 hover:text-black dark:hover:text-white flex items-center gap-1 border border-neutral-200 dark:border-neutral-800 px-2 py-0.5 transition-colors"
                   >
                     {copiedKey ? (
                       <Check className="w-3 h-3 text-emerald-500" />
                     ) : (
                       <Copy className="w-3 h-3" />
                     )}
+                    <span>{copiedKey ? "Key Copied" : "Copy Key"}</span>
                   </button>
                 </div>
               </div>

@@ -124,15 +124,15 @@ export default function HomePage() {
 
         {/* Popular Tags Quick Bar */}
         {popularTags.length > 0 && !activeTag && (
-          <div className="flex items-center gap-1.5 overflow-x-auto py-2 mb-4 scrollbar-none text-xs font-mono">
-            <span className="text-neutral-400 uppercase text-[10px] shrink-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto py-2 mb-4 scrollbar-none text-xs">
+            <span className="text-neutral-400 uppercase text-[10px] shrink-0 font-medium">
               trending:
             </span>
             {popularTags.map((t: any) => (
               <button
                 key={t.id}
                 onClick={() => setActiveTag(t.name)}
-                className="shrink-0 px-2 py-0.5 border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 hover:border-black dark:hover:border-white transition-colors text-neutral-800 dark:text-neutral-200"
+                className="shrink-0 px-2 py-0.5 border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 hover:border-black dark:hover:border-white transition-colors text-neutral-800 dark:text-neutral-200 font-medium"
               >
                 #{t.name}
               </button>
@@ -142,12 +142,12 @@ export default function HomePage() {
 
         {/* Feed Filter Sub-header */}
         <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-2 mb-4">
-          <div className="flex items-center gap-1 font-mono text-xs">
+          <div className="flex items-center gap-1 text-xs">
             <button
               onClick={() => setFeedMode("all")}
-              className={`px-2 py-1 transition-colors ${
+              className={`px-2.5 py-1 transition-colors ${
                 feedMode === "all"
-                  ? "bg-black text-white dark:bg-white dark:text-black font-bold"
+                  ? "bg-black text-white dark:bg-white dark:text-black font-semibold"
                   : "text-neutral-500 hover:text-black dark:hover:text-white"
               }`}
             >
@@ -155,9 +155,9 @@ export default function HomePage() {
             </button>
             <button
               onClick={() => setFeedMode("signed")}
-              className={`px-2 py-1 transition-colors flex items-center gap-1 ${
+              className={`px-2.5 py-1 transition-colors flex items-center gap-1 ${
                 feedMode === "signed"
-                  ? "bg-black text-white dark:bg-white dark:text-black font-bold"
+                  ? "bg-black text-white dark:bg-white dark:text-black font-semibold"
                   : "text-neutral-500 hover:text-black dark:hover:text-white"
               }`}
             >
@@ -166,9 +166,9 @@ export default function HomePage() {
             </button>
             <button
               onClick={() => setFeedMode("unsigned")}
-              className={`px-2 py-1 transition-colors flex items-center gap-1 ${
+              className={`px-2.5 py-1 transition-colors flex items-center gap-1 ${
                 feedMode === "unsigned"
-                  ? "bg-black text-white dark:bg-white dark:text-black font-bold"
+                  ? "bg-black text-white dark:bg-white dark:text-black font-semibold"
                   : "text-neutral-500 hover:text-black dark:hover:text-white"
               }`}
             >
@@ -177,20 +177,18 @@ export default function HomePage() {
             </button>
           </div>
 
-          <div className="font-mono text-[11px] text-neutral-400">
+          <div className="text-xs text-neutral-400">
             {activeTag ? (
               <span className="flex items-center gap-1">
                 <span>filtering #{activeTag}</span>
                 <button
                   onClick={() => setActiveTag(null)}
-                  className="hover:underline text-black dark:text-white"
+                  className="hover:underline text-black dark:text-white font-medium"
                 >
                   (clear)
                 </button>
               </span>
-            ) : (
-              <span>realtime stream</span>
-            )}
+            ) : null}
           </div>
         </div>
 

@@ -169,64 +169,34 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
             </div>
 
-            {/* Public Key Display */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between font-mono text-xs text-neutral-500">
-                <span>Public Key:</span>
-                <button
-                  onClick={handleCopyPubkey}
-                  className="hover:text-black dark:hover:text-white flex items-center gap-1"
-                >
-                  {copiedPubkey ? (
-                    <Check className="w-3 h-3 text-emerald-500" />
-                  ) : (
-                    <Copy className="w-3 h-3" />
-                  )}
-                  <span>Copy</span>
-                </button>
+            {/* Public Key */}
+            <div className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 text-sm">
+              <div>
+                <span className="font-medium text-black dark:text-white">Public Key</span>
+                <p className="text-xs text-neutral-500">Your cryptographic author identity</p>
               </div>
-              <div className="p-2.5 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 font-mono text-xs break-all select-all text-neutral-800 dark:text-neutral-200">
-                {keypair?.publicKey || "None"}
-              </div>
+              <button
+                onClick={handleCopyPubkey}
+                className="text-xs border border-neutral-300 dark:border-neutral-700 px-2.5 py-1 hover:border-black dark:hover:border-white transition-colors flex items-center gap-1 font-medium"
+              >
+                {copiedPubkey ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedPubkey ? "Copied" : "Copy"}</span>
+              </button>
             </div>
 
-            {/* Private Key Display */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between font-mono text-xs text-neutral-500">
-                <span className="flex items-center gap-1 text-neutral-600 dark:text-neutral-400">
-                  <AlertTriangle className="w-3 h-3 text-amber-500" />
-                  <span>Private Key:</span>
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowPrivateKey(!showPrivateKey)}
-                    className="hover:text-black dark:hover:text-white flex items-center gap-1"
-                  >
-                    {showPrivateKey ? (
-                      <EyeOff className="w-3 h-3" />
-                    ) : (
-                      <Eye className="w-3 h-3" />
-                    )}
-                    <span>{showPrivateKey ? "Hide" : "Reveal"}</span>
-                  </button>
-                  <button
-                    onClick={handleCopyPrivkey}
-                    className="hover:text-black dark:hover:text-white flex items-center gap-1"
-                  >
-                    {copiedPrivkey ? (
-                      <Check className="w-3 h-3 text-emerald-500" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
-                    )}
-                    <span>Copy</span>
-                  </button>
-                </div>
+            {/* Secret Key */}
+            <div className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 text-sm">
+              <div>
+                <span className="font-medium text-black dark:text-white">Secret Key</span>
+                <p className="text-xs text-neutral-500">Keep this safe. Used to sign and edit your posts.</p>
               </div>
-              <div className="p-2.5 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 font-mono text-xs break-all select-all text-neutral-800 dark:text-neutral-200">
-                {showPrivateKey
-                  ? keypair?.privateKey
-                  : "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••"}
-              </div>
+              <button
+                onClick={handleCopyPrivkey}
+                className="text-xs border border-neutral-300 dark:border-neutral-700 px-2.5 py-1 hover:border-black dark:hover:border-white transition-colors flex items-center gap-1 font-medium"
+              >
+                {copiedPrivkey ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedPrivkey ? "Copied" : "Copy Secret"}</span>
+              </button>
             </div>
           </section>
 

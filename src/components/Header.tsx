@@ -101,7 +101,7 @@ export function Header({
             title="Browse Hashtags"
           >
             <Hash className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline ml-1 font-mono">Tags</span>
+            <span className="hidden sm:inline ml-1 font-medium">Tags</span>
           </Button>
 
           {/* Profile */}
@@ -113,7 +113,7 @@ export function Header({
             title="My Profile"
           >
             <User className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline ml-1 font-mono">Profile</span>
+            <span className="hidden sm:inline ml-1 font-medium">Profile</span>
           </Button>
 
           {/* Settings */}
