@@ -11,9 +11,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
-import { ShieldCheck, Edit3 } from "lucide-react";
+import { Edit3 } from "lucide-react";
 
 interface EditPostModalProps {
   post: PostItem | null;
@@ -50,13 +49,12 @@ export function EditPostModal({
       return;
     }
     if (trimmed === post.content) {
-      toast.info("No changes made");
       onClose();
       return;
     }
 
     if (!keypair?.privateKey || !keypair?.publicKey) {
-      toast.error("Missing private key to sign edit action");
+      toast.error("Missing key to edit post");
       return;
     }
 
@@ -87,7 +85,7 @@ export function EditPostModal({
         throw new Error(data.error || "Failed to edit post");
       }
 
-      toast.success("Post updated with cryptographic signature");
+      toast.success("Post updated");
       if (onEditedSuccess) {
         onEditedSuccess(data.post);
       }
@@ -105,12 +103,8 @@ export function EditPostModal({
         <DialogHeader>
           <DialogTitle className="font-mono text-base font-bold flex items-center gap-2">
             <Edit3 className="w-4 h-4" />
-            <span>Edit Signed Post</span>
+            <span>Edit Post</span>
           </DialogTitle>
-          <DialogDescription className="font-mono text-xs text-neutral-500">
-            Unsigned posts are immutable. Since this post was signed by your
-            public key, you can sign and publish a revised version.
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSave} className="space-y-4 mt-2">
@@ -119,16 +113,13 @@ export function EditPostModal({
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={5}
-              placeholder="Edit your thoughts..."
+              placeholder="Edit your post..."
               className="w-full bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 p-3 text-sm font-sans focus:outline-none focus:border-black dark:focus:border-white resize-none text-black dark:text-white"
             />
           </div>
 
           {detectedTags.length > 0 && (
             <div className="flex flex-wrap items-center gap-1">
-              <span className="font-mono text-[10px] uppercase text-neutral-400">
-                tags:
-              </span>
               {detectedTags.map((t) => (
                 <span
                   key={t}
@@ -140,32 +131,21 @@ export function EditPostModal({
             </div>
           )}
 
-          <div className="p-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 text-xs font-mono space-y-1">
-            <div className="flex items-center gap-1.5 font-bold text-neutral-700 dark:text-neutral-300">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Ed25519 Re-Signing</span>
-            </div>
-            <p className="text-neutral-500 text-[11px]">
-              A new canonical edit payload will be signed with your private key.
-              Previous revisions remain stored in cryptographic history.
-            </p>
-          </div>
-
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
-              className="rounded-none font-mono text-xs border-neutral-300 dark:border-neutral-700"
+              className="rounded-none text-xs border-neutral-300 dark:border-neutral-700"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={isSubmitting || !content.trim()}
-              className="rounded-none font-mono text-xs bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200"
+              className="rounded-none text-xs bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200"
             >
-              {isSubmitting ? "Signing & Saving..." : "Sign & Save Revision"}
+              {isSubmitting ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </form>

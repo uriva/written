@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { User, Copy, Check, Edit2, ShieldCheck, ExternalLink } from "lucide-react";
+import { User, Copy, Check, Edit2 } from "lucide-react";
 import { PostCard, PostItem } from "./PostCard";
 
 interface ProfileModalProps {
@@ -78,7 +78,7 @@ export function ProfileModal({
   const handleCopyPubkey = () => {
     navigator.clipboard.writeText(pubkey);
     setCopiedKey(true);
-    toast.success("Public key copied");
+    toast.success("Identifier copied");
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
@@ -89,7 +89,7 @@ export function ProfileModal({
       return;
     }
     if (!keypair?.privateKey) {
-      toast.error("Private key required to sign profile update");
+      toast.error("Missing key to update profile");
       return;
     }
 
@@ -125,7 +125,7 @@ export function ProfileModal({
       }
 
       updateLocalProfile(name.trim(), bio.trim(), avatar.trim());
-      toast.success("Profile saved and cryptographically signed");
+      toast.success("Profile saved");
       setIsEditing(false);
       fetchProfile(keypair.publicKey);
     } catch (err: any) {
@@ -144,14 +144,14 @@ export function ProfileModal({
           <div className="flex items-center justify-between">
             <DialogTitle className="font-mono text-sm font-bold flex items-center gap-2">
               <User className="w-4 h-4" />
-              <span>Public Profile</span>
+              <span>Profile</span>
             </DialogTitle>
             {isOwner && !isEditing && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsEditing(true)}
-                className="h-7 px-2 font-mono text-xs rounded-none border-neutral-300 dark:border-neutral-700"
+                className="h-7 px-2 text-xs rounded-none border-neutral-300 dark:border-neutral-700"
               >
                 <Edit2 className="w-3 h-3 mr-1" />
                 Edit Profile
@@ -161,37 +161,36 @@ export function ProfileModal({
         </DialogHeader>
 
         {isEditing ? (
-          /* Profile Edit Form */
           <form onSubmit={handleSaveProfile} className="space-y-4 pt-2">
             <div className="space-y-1">
-              <label className="font-mono text-xs text-neutral-500 uppercase">
+              <label className="text-xs text-neutral-500 uppercase font-mono">
                 Display Name *
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Satoshi, Alice, Agent 007"
+                placeholder="Your name"
                 className="w-full bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 p-2 text-sm font-sans focus:outline-none focus:border-black dark:focus:border-white text-black dark:text-white"
                 required
               />
             </div>
 
             <div className="space-y-1">
-              <label className="font-mono text-xs text-neutral-500 uppercase">
+              <label className="text-xs text-neutral-500 uppercase font-mono">
                 Bio
               </label>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="A short note about who you are or what you build..."
+                placeholder="A short bio..."
                 rows={3}
                 className="w-full bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 p-2 text-sm font-sans focus:outline-none focus:border-black dark:focus:border-white resize-none text-black dark:text-white"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="font-mono text-xs text-neutral-500 uppercase">
+              <label className="text-xs text-neutral-500 uppercase font-mono">
                 Avatar URL (optional)
               </label>
               <input
@@ -203,49 +202,33 @@ export function ProfileModal({
               />
             </div>
 
-            <div className="p-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 text-xs font-mono space-y-1">
-              <div className="flex items-center gap-1.5 font-bold">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Signed Identity Verification</span>
-              </div>
-              <p className="text-neutral-500 text-[11px]">
-                Profile updates are cryptographically signed with your active
-                private key.
-              </p>
-            </div>
-
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setIsEditing(false)}
-                className="rounded-none font-mono text-xs border-neutral-300 dark:border-neutral-700"
+                className="rounded-none text-xs border-neutral-300 dark:border-neutral-700"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={isSaving}
-                className="rounded-none font-mono text-xs bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200"
+                className="rounded-none text-xs bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200"
               >
-                {isSaving ? "Signing & Saving..." : "Sign & Update Profile"}
+                {isSaving ? "Saving..." : "Save Profile"}
               </Button>
             </div>
           </form>
         ) : (
-          /* Profile View */
           <div className="space-y-5 pt-2">
-            {/* Header info */}
             <div className="flex items-start gap-3">
-              <div className="w-12 h-12 rounded-none bg-black dark:bg-white text-white dark:text-black flex items-center justify-center font-mono font-bold text-lg shrink-0 overflow-hidden">
+              <div className="w-12 h-12 rounded-full bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 flex items-center justify-center font-bold text-base shrink-0 overflow-hidden">
                 {profileData?.profile?.avatar ? (
                   <img
                     src={profileData.profile.avatar}
                     alt=""
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as any).style.display = "none";
-                    }}
                   />
                 ) : (
                   (profileData?.profile?.name || pubkey).slice(0, 2).toUpperCase()
@@ -254,8 +237,8 @@ export function ProfileModal({
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-mono font-bold text-base text-black dark:text-white truncate">
-                    {profileData?.profile?.name || "Anonymous Keyholder"}
+                  <h3 className="font-bold text-base text-black dark:text-white truncate">
+                    {profileData?.profile?.name || `@${formatShortKey(pubkey)}`}
                   </h3>
                   {isOwner && (
                     <span className="font-mono text-[9px] uppercase px-1.5 py-0.5 bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-neutral-500">
@@ -265,21 +248,17 @@ export function ProfileModal({
                 </div>
 
                 {profileData?.profile?.bio && (
-                  <p className="text-sm font-sans text-neutral-700 dark:text-neutral-300 mt-1 whitespace-pre-wrap leading-relaxed">
+                  <p className="text-sm text-neutral-700 dark:text-neutral-300 mt-1 whitespace-pre-wrap leading-relaxed">
                     {profileData.profile.bio}
                   </p>
                 )}
 
-                {/* Public Key Display */}
-                <div className="mt-2 flex items-center gap-1.5 font-mono text-[11px] text-neutral-500">
-                  <span className="text-neutral-400">pk:</span>
-                  <span className="truncate max-w-[260px] select-all">
-                    {pubkey}
-                  </span>
+                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-neutral-400 font-mono">
+                  <span>@{formatShortKey(pubkey)}</span>
                   <button
                     onClick={handleCopyPubkey}
                     className="hover:text-black dark:hover:text-white p-0.5"
-                    title="Copy full public key"
+                    title="Copy identifier"
                   >
                     {copiedKey ? (
                       <Check className="w-3 h-3 text-emerald-500" />
@@ -291,17 +270,16 @@ export function ProfileModal({
               </div>
             </div>
 
-            {/* Author Posts */}
             <div className="space-y-3 pt-3 border-t border-neutral-100 dark:border-neutral-900">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-xs font-bold uppercase text-neutral-500">
+                <span className="text-xs font-mono text-neutral-400 uppercase">
                   Posts ({profileData?.postCount || recentPosts.length})
                 </span>
               </div>
 
               {recentPosts.length === 0 ? (
-                <div className="text-center py-6 text-neutral-400 font-mono text-xs">
-                  No public posts signed by this key yet.
+                <div className="text-center py-6 text-neutral-400 text-xs font-mono">
+                  No posts yet.
                 </div>
               ) : (
                 <div className="space-y-3">

@@ -238,8 +238,6 @@ export default function HomePage() {
         <div className="max-w-2xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="font-bold text-black dark:text-white">written</span>
-            <span>•</span>
-            <span>accountless social protocol</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -247,7 +245,7 @@ export default function HomePage() {
               onClick={() => setIsApiDocsOpen(true)}
               className="hover:text-black dark:hover:text-white underline underline-offset-2"
             >
-              API Reference
+              API
             </button>
             <a
               href="/llms.txt"
@@ -255,13 +253,13 @@ export default function HomePage() {
               rel="noreferrer"
               className="hover:text-black dark:hover:text-white underline underline-offset-2"
             >
-              /llms.txt
+              llms.txt
             </a>
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="hover:text-black dark:hover:text-white underline underline-offset-2"
             >
-              Keys
+              Settings
             </button>
           </div>
         </div>

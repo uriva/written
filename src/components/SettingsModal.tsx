@@ -7,7 +7,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,11 +17,9 @@ import {
   EyeOff,
   RefreshCw,
   Upload,
-  Mail,
   Cloud,
   LogOut,
   AlertTriangle,
-  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatShortKey } from "@/lib/crypto";
@@ -38,7 +35,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     generateNewKey,
     importPrivateKey,
     authUser,
-    authLoading,
     sendEmailCode,
     verifyEmailCode,
     signOutEmail,
@@ -76,16 +72,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (!keypair?.privateKey) return;
     navigator.clipboard.writeText(keypair.privateKey);
     setCopiedPrivkey(true);
-    toast.success("Private key copied to clipboard. Keep this secret!");
+    toast.success("Private key copied");
     setTimeout(() => setCopiedPrivkey(false), 2000);
   };
 
   const handleGenerateNew = () => {
-    if (
-      confirm(
-        "Generate a brand new keypair? Make sure you have exported or backed up your current private key if you want to keep it!"
-      )
-    ) {
+    if (confirm("Generate a new keypair?")) {
       generateNewKey();
     }
   };
@@ -107,7 +99,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       await sendEmailCode(emailInput);
       setCodeSent(true);
     } catch (err: any) {
-      toast.error(err.message || "Failed to send verification code");
+      toast.error(err.message || "Failed to send code");
     } finally {
       setIsSendingCode(false);
     }
@@ -121,7 +113,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setCodeSent(false);
       setCodeInput("");
     } catch (err: any) {
-      toast.error(err.message || "Invalid verification code");
+      toast.error(err.message || "Invalid code");
     } finally {
       setIsVerifyingCode(false);
     }
@@ -144,12 +136,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         <DialogHeader>
           <DialogTitle className="font-mono text-base font-bold flex items-center gap-2">
             <Key className="w-4 h-4" />
-            <span>Identity & Keypair Settings</span>
+            <span>Settings</span>
           </DialogTitle>
-          <DialogDescription className="font-mono text-xs text-neutral-500">
-            Written is client-side and protocol-native. Your keys live in your
-            browser by default.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 pt-2">
@@ -157,7 +145,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <section className="space-y-3">
             <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-900 pb-1.5">
               <span className="font-mono text-xs font-bold uppercase text-neutral-500">
-                Current Ed25519 Keypair
+                Keypair
               </span>
               <div className="flex items-center gap-1">
                 <Button
@@ -184,7 +172,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {/* Public Key Display */}
             <div className="space-y-1">
               <div className="flex items-center justify-between font-mono text-xs text-neutral-500">
-                <span>Public Key (Identity):</span>
+                <span>Public Key:</span>
                 <button
                   onClick={handleCopyPubkey}
                   className="hover:text-black dark:hover:text-white flex items-center gap-1"
@@ -198,16 +186,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </button>
               </div>
               <div className="p-2.5 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 font-mono text-xs break-all select-all text-neutral-800 dark:text-neutral-200">
-                {keypair?.publicKey || "No keypair generated"}
+                {keypair?.publicKey || "None"}
               </div>
             </div>
 
             {/* Private Key Display */}
             <div className="space-y-1">
               <div className="flex items-center justify-between font-mono text-xs text-neutral-500">
-                <span className="flex items-center gap-1 text-red-500">
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>Private Key (Secret):</span>
+                <span className="flex items-center gap-1 text-neutral-600 dark:text-neutral-400">
+                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                  <span>Private Key:</span>
                 </span>
                 <div className="flex items-center gap-2">
                   <button
@@ -249,13 +237,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               className="p-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 space-y-2 animate-fadeIn"
             >
               <div className="font-mono text-xs font-bold text-neutral-700 dark:text-neutral-300">
-                Import Existing 64-char Hex Private Key
+                Import Private Key (Hex)
               </div>
               <input
                 type="text"
                 value={importKeyHex}
                 onChange={(e) => setImportKeyHex(e.target.value)}
-                placeholder="Paste 64-character Ed25519 secret key hex..."
+                placeholder="Paste 64-character secret key..."
                 className="w-full bg-white dark:bg-black border border-neutral-300 dark:border-neutral-700 p-2 font-mono text-xs focus:outline-none focus:border-black dark:focus:border-white text-black dark:text-white"
               />
               <div className="flex justify-end gap-2">
@@ -264,14 +252,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowImportForm(false)}
-                  className="rounded-none font-mono text-xs h-7"
+                  className="rounded-none text-xs h-7"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   size="sm"
-                  className="rounded-none font-mono text-xs h-7 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200"
+                  className="rounded-none text-xs h-7 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200"
                 >
                   Import Key
                 </Button>
@@ -284,12 +272,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-900 pb-1.5">
               <span className="font-mono text-xs font-bold uppercase text-neutral-500 flex items-center gap-1.5">
                 <Cloud className="w-3.5 h-3.5" />
-                <span>Cloud Key Backup (Optional)</span>
+                <span>Email Key Backup</span>
               </span>
               {authUser && (
                 <button
                   onClick={signOutEmail}
-                  className="font-mono text-[11px] text-neutral-400 hover:text-red-500 flex items-center gap-1"
+                  className="text-[11px] text-neutral-400 hover:text-red-500 flex items-center gap-1"
                 >
                   <LogOut className="w-3 h-3" />
                   Sign Out
@@ -297,33 +285,28 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               )}
             </div>
 
-            <p className="font-sans text-xs text-neutral-600 dark:text-neutral-400 leading-normal">
-              Written does not require an account to post. You can optionally sign
-              in with email here to securely backup your private key to your
-              InstantDB account so you can restore it on other devices.
+            <p className="text-xs text-neutral-500 leading-normal">
+              Optionally back up your private key to your email so you can restore
+              it on other devices.
             </p>
 
             {!authUser ? (
-              /* Email Sign In Flow */
               <div className="p-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 space-y-3">
                 {!codeSent ? (
                   <form onSubmit={handleSendEmail} className="space-y-2">
-                    <label className="font-mono text-[11px] text-neutral-500 block">
-                      Enter your email for InstantDB magic code:
-                    </label>
                     <div className="flex gap-2">
                       <input
                         type="email"
                         value={emailInput}
                         onChange={(e) => setEmailInput(e.target.value)}
                         placeholder="you@domain.com"
-                        className="flex-1 bg-white dark:bg-black border border-neutral-300 dark:border-neutral-700 p-2 font-mono text-xs focus:outline-none focus:border-black dark:focus:border-white text-black dark:text-white"
+                        className="flex-1 bg-white dark:bg-black border border-neutral-300 dark:border-neutral-700 p-2 text-xs focus:outline-none focus:border-black dark:focus:border-white text-black dark:text-white"
                         required
                       />
                       <Button
                         type="submit"
                         disabled={isSendingCode}
-                        className="rounded-none font-mono text-xs h-8 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 shrink-0"
+                        className="rounded-none text-xs h-8 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 shrink-0"
                       >
                         {isSendingCode ? "Sending..." : "Send Code"}
                       </Button>
@@ -331,9 +314,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </form>
                 ) : (
                   <form onSubmit={handleVerifyEmail} className="space-y-2">
-                    <label className="font-mono text-[11px] text-neutral-500 block">
-                      Enter the 6-digit code sent to {emailInput}:
-                    </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -347,7 +327,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       <Button
                         type="submit"
                         disabled={isVerifyingCode}
-                        className="rounded-none font-mono text-xs h-8 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 shrink-0"
+                        className="rounded-none text-xs h-8 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 shrink-0"
                       >
                         {isVerifyingCode ? "Verifying..." : "Verify & Sign In"}
                       </Button>
@@ -355,7 +335,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <button
                       type="button"
                       onClick={() => setCodeSent(false)}
-                      className="font-mono text-[10px] text-neutral-400 hover:text-black dark:hover:text-white underline"
+                      className="text-[10px] text-neutral-400 hover:text-black dark:hover:text-white underline"
                     >
                       Use a different email
                     </button>
@@ -363,10 +343,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 )}
               </div>
             ) : (
-              /* Signed In: Backup & Restore Actions */
-              <div className="p-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 space-y-3 font-mono text-xs">
+              <div className="p-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 space-y-3 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-500">Connected account:</span>
+                  <span className="text-neutral-500">Connected email:</span>
                   <span className="font-bold text-black dark:text-white">
                     {authUser.email}
                   </span>
@@ -377,10 +356,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     type="button"
                     onClick={handleSaveToCloud}
                     disabled={isBackingUp}
-                    className="rounded-none font-mono text-xs h-8 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 flex-1"
+                    className="rounded-none text-xs h-8 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 flex-1"
                   >
                     <Cloud className="w-3.5 h-3.5 mr-1.5" />
-                    {isBackingUp ? "Saving..." : "Save Active Key to Account"}
+                    {isBackingUp ? "Saving..." : "Save Key to Cloud"}
                   </Button>
 
                   {hasCloudKey && (
@@ -388,10 +367,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       type="button"
                       variant="outline"
                       onClick={restoreKeyFromAccount}
-                      className="rounded-none font-mono text-xs h-8 border-neutral-300 dark:border-neutral-700 flex-1"
-                      title={`Restore key ${formatShortKey(cloudKeyPubkey)}`}
+                      className="rounded-none text-xs h-8 border-neutral-300 dark:border-neutral-700 flex-1"
                     >
-                      Restore Cloud Key ({formatShortKey(cloudKeyPubkey)})
+                      Restore Cloud Key
                     </Button>
                   )}
                 </div>

@@ -2,16 +2,14 @@
 
 import React from "react";
 import { useIdentity } from "@/lib/useIdentity";
-import { formatShortKey } from "@/lib/crypto";
+import { useTheme } from "@/lib/useTheme";
 import {
-  Key,
-  Shield,
-  ShieldAlert,
-  Terminal,
+  Sun,
+  Moon,
   Settings as SettingsIcon,
   User,
   Hash,
-  Sparkles,
+  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -33,10 +31,11 @@ export function Header({
   onClearTag,
 }: HeaderProps) {
   const { keypair, isSignedMode, setIsSignedMode, profileName } = useIdentity();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-neutral-200 dark:border-neutral-800 bg-white/95 dark:bg-black/95 backdrop-blur-md">
-      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+      <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
         {/* Brand */}
         <div className="flex items-center gap-3">
           <a
@@ -49,7 +48,7 @@ export function Header({
               }
             }}
           >
-            <div className="w-5 h-5 bg-black dark:bg-white flex items-center justify-center rounded-none text-white dark:text-black font-mono font-bold text-xs tracking-tighter">
+            <div className="w-5 h-5 bg-black dark:bg-white flex items-center justify-center text-white dark:text-black font-mono font-bold text-xs">
               w
             </div>
             <span className="font-mono font-bold text-lg tracking-tight text-black dark:text-white">
@@ -57,12 +56,8 @@ export function Header({
             </span>
           </a>
 
-          <span className="hidden sm:inline-block font-mono text-[10px] uppercase tracking-widest px-1.5 py-0.5 border border-neutral-300 dark:border-neutral-800 text-neutral-500">
-            open protocol
-          </span>
-
           {activeTag && (
-            <div className="flex items-center gap-1 bg-black text-white dark:bg-white dark:text-black font-mono text-xs px-2 py-0.5 animate-fadeIn">
+            <div className="flex items-center gap-1 bg-black text-white dark:bg-white dark:text-black font-mono text-xs px-2 py-0.5">
               <span>#{activeTag}</span>
               <button
                 onClick={onClearTag}
@@ -75,34 +70,26 @@ export function Header({
           )}
         </div>
 
-        {/* Status & Nav Actions */}
-        <div className="flex items-center gap-2">
-          {/* Sign Mode Toggle Pill */}
+        {/* Status & Navigation */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Sign Mode Toggle */}
           <button
             onClick={() => setIsSignedMode(!isSignedMode)}
-            className={`font-mono text-xs px-2.5 py-1 transition-all flex items-center gap-1.5 border ${
+            className={`text-xs px-2.5 py-1 transition-all flex items-center gap-1.5 border rounded-none ${
               isSignedMode
-                ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white font-medium shadow-xs"
-                : "bg-transparent text-neutral-500 hover:text-black dark:hover:text-white border-neutral-300 dark:border-neutral-800"
+                ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white font-medium"
+                : "bg-transparent text-neutral-500 border-neutral-300 dark:border-neutral-800 hover:text-black dark:hover:text-white"
             }`}
-            title={
-              isSignedMode
-                ? `Signing posts as ${formatShortKey(keypair?.publicKey)} (click to switch to anonymous)`
-                : "Posting anonymously (click to switch to signed)"
-            }
+            title={isSignedMode ? "Posting as signed (click to switch to anonymous)" : "Posting as anonymous (click to switch to signed)"}
           >
-            {isSignedMode ? (
-              <>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="hidden md:inline">signed:</span>
-                <span>{profileName || formatShortKey(keypair?.publicKey)}</span>
-              </>
-            ) : (
-              <>
-                <span className="w-1.5 h-1.5 rounded-full border border-neutral-400" />
-                <span>anonymous</span>
-              </>
-            )}
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isSignedMode ? "bg-emerald-400" : "bg-neutral-400"
+              }`}
+            />
+            <span className="text-xs">
+              {isSignedMode ? profileName || "Signed" : "Anonymous"}
+            </span>
           </button>
 
           {/* Tags */}
@@ -110,23 +97,11 @@ export function Header({
             variant="ghost"
             size="sm"
             onClick={onOpenTags}
-            className="h-8 px-2 font-mono text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white rounded-none"
+            className="h-8 px-2 text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white rounded-none"
             title="Browse Hashtags"
           >
-            <Hash className="w-3.5 h-3.5 mr-1" />
-            <span className="hidden sm:inline">Tags</span>
-          </Button>
-
-          {/* API & Agents */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onOpenApiDocs}
-            className="h-8 px-2 font-mono text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white rounded-none"
-            title="API & Autonomous Agents"
-          >
-            <Terminal className="w-3.5 h-3.5 mr-1" />
-            <span className="hidden sm:inline">API</span>
+            <Hash className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline ml-1 font-mono">Tags</span>
           </Button>
 
           {/* Profile */}
@@ -134,11 +109,11 @@ export function Header({
             variant="ghost"
             size="sm"
             onClick={() => onOpenProfile(keypair?.publicKey)}
-            className="h-8 px-2 font-mono text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white rounded-none"
+            className="h-8 px-2 text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white rounded-none"
             title="My Profile"
           >
-            <User className="w-3.5 h-3.5 mr-1" />
-            <span className="hidden sm:inline">Profile</span>
+            <User className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline ml-1 font-mono">Profile</span>
           </Button>
 
           {/* Settings */}
@@ -146,10 +121,25 @@ export function Header({
             variant="ghost"
             size="sm"
             onClick={onOpenSettings}
-            className="h-8 px-2 font-mono text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white rounded-none"
-            title="Settings & Keypair Management"
+            className="h-8 px-2 text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white rounded-none"
+            title="Settings & Key Backup"
           >
             <SettingsIcon className="w-3.5 h-3.5" />
+          </Button>
+
+          {/* Light / Dark Mode Toggle */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleTheme}
+            className="h-8 px-2 text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white rounded-none"
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            {theme === "dark" ? (
+              <Sun className="w-4 h-4 text-neutral-300 hover:text-white" />
+            ) : (
+              <Moon className="w-4 h-4 text-neutral-700 hover:text-black" />
+            )}
           </Button>
         </div>
       </div>

@@ -6,7 +6,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { Hash, Search } from "lucide-react";
 import { db } from "@/lib/db";
@@ -46,11 +45,8 @@ export function TagsModal({
         <DialogHeader>
           <DialogTitle className="font-mono text-base font-bold flex items-center gap-2">
             <Hash className="w-4 h-4" />
-            <span>Hashtag Directory</span>
+            <span>Tags</span>
           </DialogTitle>
-          <DialogDescription className="font-mono text-xs text-neutral-500">
-            Hashtags categorize public threads without algorithmic interference.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
@@ -61,7 +57,7 @@ export function TagsModal({
               type="text"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter hashtags..."
+              placeholder="Search tags..."
               className="w-full pl-8 pr-3 py-2 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 text-xs font-mono focus:outline-none focus:border-black dark:focus:border-white text-black dark:text-white"
             />
           </div>
@@ -73,7 +69,7 @@ export function TagsModal({
             </div>
           ) : filteredTags.length === 0 ? (
             <div className="py-8 text-center font-mono text-xs text-neutral-400">
-              {filter ? "No matching hashtags found" : "No hashtags created yet. Type #yourtag in a post!"}
+              {filter ? "No matching tags" : "No tags yet. Use #tag in any post."}
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">

@@ -5,12 +5,11 @@ import { useIdentity } from "@/lib/useIdentity";
 import {
   buildPostCanonicalMessage,
   extractHashtags,
-  formatShortKey,
   signPayload,
 } from "@/lib/crypto";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Shield, ShieldAlert, Sparkles, Send, X, CornerDownRight } from "lucide-react";
+import { X, CornerDownRight, CheckCircle2, Circle } from "lucide-react";
 
 interface ComposerProps {
   replyToPost?: {
@@ -49,7 +48,7 @@ export function Composer({
     if (e) e.preventDefault();
     const trimmed = content.trim();
     if (!trimmed) {
-      toast.error("Write something before publishing");
+      toast.error("Write something first");
       return;
     }
     if (trimmed.length > charLimit) {
@@ -67,7 +66,7 @@ export function Composer({
 
       if (isSignedMode) {
         if (!keypair) {
-          throw new Error("No cryptographic keypair found. Please generate or import one.");
+          throw new Error("No cryptographic keypair found. Please generate one in settings.");
         }
         authorPubkey = keypair.publicKey;
         const canonicalMsg = buildPostCanonicalMessage({
@@ -78,7 +77,6 @@ export function Composer({
         signature = signPayload(canonicalMsg, keypair.privateKey);
       }
 
-      // Submit via API endpoint (ensures canonical signature check & tag indexing)
       const res = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,9 +99,7 @@ export function Composer({
         onCancelReply();
       }
 
-      toast.success(
-        isSignedMode ? "Published signed post" : "Published anonymous post"
-      );
+      toast.success(isSignedMode ? "Published signed post" : "Published anonymous post");
 
       if (onPostSuccess) {
         onPostSuccess(data.post.id);
@@ -123,25 +119,24 @@ export function Composer({
   };
 
   return (
-    <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-black p-4 mb-6 shadow-xs">
+    <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-black p-4 mb-5">
       {/* Reply Banner */}
       {replyToPost && (
-        <div className="flex items-center justify-between gap-2 mb-3 pb-2.5 border-b border-neutral-100 dark:border-neutral-900 text-xs font-mono">
+        <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-neutral-100 dark:border-neutral-900 text-xs">
           <div className="flex items-center gap-1.5 text-neutral-500 truncate">
             <CornerDownRight className="w-3.5 h-3.5 shrink-0" />
             <span>Replying to</span>
             <span className="font-bold text-black dark:text-white truncate">
-              {replyToPost.profileName ||
-                formatShortKey(replyToPost.authorPubkey)}
+              {replyToPost.profileName || "author"}
             </span>
             <span className="text-neutral-400 truncate max-w-[200px]">
-              &ldquo;{replyToPost.content.slice(0, 40)}...&rdquo;
+              &ldquo;{replyToPost.content.slice(0, 35)}...&rdquo;
             </span>
           </div>
           {onCancelReply && (
             <button
               onClick={onCancelReply}
-              className="text-neutral-400 hover:text-black dark:hover:text-white font-mono"
+              className="text-neutral-400 hover:text-black dark:hover:text-white p-1"
               title="Cancel reply"
             >
               <X className="w-3.5 h-3.5" />
@@ -150,8 +145,8 @@ export function Composer({
         </div>
       )}
 
-      {/* Composer Input */}
-      <div className="relative">
+      {/* Input */}
+      <div>
         <textarea
           ref={textareaRef}
           value={content}
@@ -159,24 +154,21 @@ export function Composer({
           onKeyDown={handleKeyDown}
           placeholder={
             replyToPost
-              ? "Write your reply... (use #hashtags freely)"
-              : "What is on your mind? Write freely... (use #hashtags to index)"
+              ? "Write your reply... (use #tags freely)"
+              : "What's happening? Write freely... (use #tags)"
           }
-          className="w-full bg-transparent border-0 resize-none focus:outline-none text-black dark:text-white placeholder:text-neutral-400 text-base leading-relaxed min-h-[90px]"
+          className="w-full bg-transparent border-0 resize-none focus:outline-none text-black dark:text-white placeholder:text-neutral-400 text-base leading-relaxed min-h-[80px]"
           rows={3}
         />
       </div>
 
-      {/* Detected Hashtags Preview */}
+      {/* Detected Hashtags */}
       {detectedTags.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 mb-3 pt-1">
-          <span className="font-mono text-[10px] uppercase text-neutral-400">
-            tags:
-          </span>
+        <div className="flex flex-wrap items-center gap-1 mb-2">
           {detectedTags.map((t) => (
             <span
               key={t}
-              className="font-mono text-xs px-1.5 py-0.5 bg-neutral-100 dark:bg-neutral-900 text-black dark:text-white border border-neutral-200 dark:border-neutral-800"
+              className="font-mono text-xs px-1.5 py-0.5 bg-neutral-100 dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 border border-neutral-200 dark:border-neutral-800"
             >
               #{t}
             </span>
@@ -184,62 +176,54 @@ export function Composer({
         </div>
       )}
 
-      {/* Composer Footer */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-neutral-100 dark:border-neutral-900">
-        {/* Signature Toggle Mode */}
+      {/* Composer Actions */}
+      <div className="flex items-center justify-between pt-2 border-t border-neutral-100 dark:border-neutral-900">
+        {/* Toggle Mode */}
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setIsSignedMode(!isSignedMode)}
-            className={`font-mono text-xs px-2 py-1 flex items-center gap-1.5 border transition-all ${
-              isSignedMode
-                ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white font-medium"
-                : "bg-transparent text-neutral-500 border-neutral-300 dark:border-neutral-800 hover:text-black dark:hover:text-white"
-            }`}
+            className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white transition-colors"
           >
             {isSignedMode ? (
               <>
-                <Shield className="w-3.5 h-3.5" />
-                <span>Signed ({profileName || formatShortKey(keypair?.publicKey)})</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="font-medium text-black dark:text-white">
+                  {profileName || "Signed"}
+                </span>
               </>
             ) : (
               <>
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>Unsigned (Anonymous)</span>
+                <Circle className="w-3.5 h-3.5 text-neutral-400" />
+                <span>Anonymous</span>
               </>
             )}
           </button>
-
-          <span className="hidden sm:inline font-mono text-[10px] text-neutral-400">
-            {isSignedMode ? "• Editable by you" : "• Immutable forever"}
+          <span className="hidden sm:inline text-[11px] text-neutral-400">
+            {isSignedMode ? "• editable later" : "• cannot be edited"}
           </span>
         </div>
 
-        {/* Counter and Submit Button */}
+        {/* Counter and Submit */}
         <div className="flex items-center gap-3">
-          <span
-            className={`font-mono text-xs ${
-              charsRemaining < 50
-                ? "text-red-500 font-bold"
-                : "text-neutral-400"
-            }`}
-          >
-            {charsRemaining}
-          </span>
+          {content.length > 0 && (
+            <span
+              className={`font-mono text-xs ${
+                charsRemaining < 50
+                  ? "text-red-500 font-bold"
+                  : "text-neutral-400"
+              }`}
+            >
+              {charsRemaining}
+            </span>
+          )}
 
           <Button
             onClick={() => handleSubmit()}
             disabled={isSubmitting || !content.trim()}
             className="rounded-none font-mono text-xs bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 px-4 h-8 transition-all"
           >
-            {isSubmitting ? (
-              "Publishing..."
-            ) : (
-              <span className="flex items-center gap-1.5">
-                <span>Publish</span>
-                <span className="text-[10px] opacity-60 hidden md:inline">⌘↵</span>
-              </span>
-            )}
+            {isSubmitting ? "Publishing..." : "Publish"}
           </Button>
         </div>
       </div>
