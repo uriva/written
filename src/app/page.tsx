@@ -34,7 +34,7 @@ export default function HomePage() {
   const [feedMode, setFeedMode] = useState<"all" | "signed" | "unsigned">("all");
 
   // InstantDB Real-time Query
-  const { data, isLoading, error } = db.useQuery({
+  const { data, isLoading } = db.useQuery({
     posts: {
       $: {
         order: { createdAt: "desc" },
@@ -43,16 +43,9 @@ export default function HomePage() {
       profile: {},
       replies: {},
     },
-    tags: {
-      $: {
-        order: { postCount: "desc" },
-        limit: 12,
-      },
-    },
   });
 
   const rawPosts = data?.posts || [];
-  const popularTags = data?.tags || [];
 
   // Filter posts
   const filteredPosts = useMemo(() => {
@@ -121,24 +114,6 @@ export default function HomePage() {
             setReplyingTo(null);
           }}
         />
-
-        {/* Popular Tags Quick Bar */}
-        {popularTags.length > 0 && !activeTag && (
-          <div className="flex items-center gap-1.5 overflow-x-auto py-2 mb-4 scrollbar-none text-xs">
-            <span className="text-neutral-400 uppercase text-[10px] shrink-0 font-medium">
-              trending:
-            </span>
-            {popularTags.map((t: any) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTag(t.name)}
-                className="shrink-0 px-2 py-0.5 border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 hover:border-black dark:hover:border-white transition-colors text-neutral-800 dark:text-neutral-200 font-medium"
-              >
-                #{t.name}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Feed Filter Sub-header */}
         <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-2 mb-4">

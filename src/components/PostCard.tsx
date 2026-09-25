@@ -5,8 +5,8 @@ import { formatTimeAgo } from "@/lib/utils";
 import { useIdentity } from "@/lib/useIdentity";
 import { pubkeyToFriendlyName, getAuthorInitials } from "@/lib/nameGenerator";
 import {
-  MessageSquare,
-  Edit2,
+  MessageCircle,
+  Pencil,
   CornerDownRight,
   ChevronRight,
   CheckCircle2,
@@ -201,9 +201,8 @@ export function PostCard({
 
             {/* Replying context */}
             {post.replyToId && (
-              <span className="flex items-center gap-0.5 text-xs text-neutral-400">
+              <span className="text-neutral-400" title="Reply">
                 <CornerDownRight className="w-3 h-3" />
-                <span>reply</span>
               </span>
             )}
           </div>
@@ -232,7 +231,7 @@ export function PostCard({
 
       {/* Actions Bar */}
       <div className="flex items-center justify-between pt-2.5 border-t border-neutral-100 dark:border-neutral-900 text-xs text-neutral-500">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           {onReply && (
             <button
               type="button"
@@ -241,9 +240,10 @@ export function PostCard({
                 onReply(post);
               }}
               className="flex items-center gap-1.5 hover:text-black dark:hover:text-white transition-colors"
+              title="Reply"
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>{repliesCount > 0 ? repliesCount : "Reply"}</span>
+              <MessageCircle className="w-4 h-4" />
+              {repliesCount > 0 && <span className="text-xs">{repliesCount}</span>}
             </button>
           )}
 
@@ -254,10 +254,10 @@ export function PostCard({
                 e.stopPropagation();
                 onEdit(post);
               }}
-              className="flex items-center gap-1 hover:text-black dark:hover:text-white transition-colors font-medium"
+              className="flex items-center hover:text-black dark:hover:text-white transition-colors"
+              title="Edit post"
             >
-              <Edit2 className="w-3 h-3" />
-              <span>Edit</span>
+              <Pencil className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -269,10 +269,10 @@ export function PostCard({
               e.stopPropagation();
               onViewThread(post);
             }}
-            className="hover:text-black dark:hover:text-white transition-colors flex items-center gap-0.5 text-xs"
+            className="hover:text-black dark:hover:text-white transition-colors p-0.5"
+            title="View thread"
           >
-            <span>Thread</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-4 h-4" />
           </button>
         )}
       </div>

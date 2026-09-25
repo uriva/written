@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useIdentity } from "@/lib/useIdentity";
 import { buildProfileCanonicalMessage, signPayload } from "@/lib/crypto";
 import { pubkeyToFriendlyName, getAuthorInitials } from "@/lib/nameGenerator";
@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { User, Copy, Check, Edit2 } from "lucide-react";
+import { User, Copy, Check, Edit2, Upload, Trash2, Camera } from "lucide-react";
 import { PostCard, PostItem } from "./PostCard";
 
 interface ProfileModalProps {
@@ -41,6 +41,7 @@ export function ProfileModal({
   const [bio, setBio] = useState("");
   const [avatar, setAvatar] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isOwner =
     keypair?.publicKey &&
@@ -81,6 +82,52 @@ export function ProfileModal({
     setCopiedKey(true);
     toast.success("Identifier copied");
     setTimeout(() => setCopiedKey(false), 2000);
+  };
+
+  // Image upload & compression handler
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 256;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          setAvatar(dataUrl);
+          toast.success("Avatar image selected");
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -136,6 +183,49 @@ export function ProfileModal({
     }
   };
 
+  // Helper to hyperlinkify URLs in bio text
+  const renderBioWithLinks = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/gu;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      const matchStart = match.index;
+      const matchEnd = matchStart + match[0].length;
+
+      if (matchStart > lastIndex) {
+        parts.push(text.slice(lastIndex, matchStart));
+      }
+
+      const url = match[0];
+      const displayUrl = url
+        .replace(/^https?:\/\/(www\.)?/, "")
+        .replace(/\/$/, "");
+
+      parts.push(
+        <a
+          key={`bio-link-${matchStart}`}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="underline underline-offset-2 font-medium text-black dark:text-white hover:opacity-75"
+        >
+          {displayUrl}
+        </a>
+      );
+
+      lastIndex = matchEnd;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+
+    return parts;
+  };
+
   const recentPosts = profileData?.recentPosts || [];
 
   return (
@@ -163,6 +253,67 @@ export function ProfileModal({
 
         {isEditing ? (
           <form onSubmit={handleSaveProfile} className="space-y-4 pt-2">
+            {/* Hidden File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+
+            {/* Avatar Upload Section */}
+            <div className="flex items-center gap-4 p-3 bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="relative w-16 h-16 rounded-full bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center overflow-hidden cursor-pointer group shrink-0 border border-neutral-300 dark:border-neutral-700"
+                title="Click to choose image"
+              >
+                {avatar ? (
+                  <img
+                    src={avatar}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User className="w-7 h-7 text-neutral-400" />
+                )}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                  <Camera className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-1">
+                <span className="text-xs font-medium block text-neutral-800 dark:text-neutral-200">
+                  Profile Picture
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-7 text-xs rounded-none border-neutral-300 dark:border-neutral-700"
+                  >
+                    <Upload className="w-3 h-3 mr-1" />
+                    Upload Image
+                  </Button>
+                  {avatar && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAvatar("")}
+                      className="h-7 text-xs text-red-500 hover:text-red-600 rounded-none px-2"
+                    >
+                      <Trash2 className="w-3 h-3 mr-1" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-1">
               <label className="text-xs text-neutral-500 uppercase font-mono">
                 Display Name *
@@ -179,27 +330,14 @@ export function ProfileModal({
 
             <div className="space-y-1">
               <label className="text-xs text-neutral-500 uppercase font-mono">
-                Bio
+                Bio (URLs will be clickable)
               </label>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="A short bio..."
+                placeholder="Tell the network about yourself... (add https://your-site.com)"
                 rows={3}
                 className="w-full bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 p-2 text-sm font-sans focus:outline-none focus:border-black dark:focus:border-white resize-none text-black dark:text-white"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs text-neutral-500 uppercase font-mono">
-                Avatar URL (optional)
-              </label>
-              <input
-                type="url"
-                value={avatar}
-                onChange={(e) => setAvatar(e.target.value)}
-                placeholder="https://..."
-                className="w-full bg-neutral-50 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 p-2 text-sm font-sans focus:outline-none focus:border-black dark:focus:border-white text-black dark:text-white"
               />
             </div>
 
@@ -224,7 +362,7 @@ export function ProfileModal({
         ) : (
           <div className="space-y-5 pt-2">
             <div className="flex items-start gap-3">
-              <div className="w-12 h-12 rounded-full bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 flex items-center justify-center font-bold text-base shrink-0 overflow-hidden">
+              <div className="w-14 h-14 rounded-full bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 flex items-center justify-center font-bold text-base shrink-0 overflow-hidden border border-neutral-200 dark:border-neutral-800">
                 {profileData?.profile?.avatar ? (
                   <img
                     src={profileData.profile.avatar}
@@ -232,7 +370,7 @@ export function ProfileModal({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  (profileData?.profile?.name || pubkey).slice(0, 2).toUpperCase()
+                  getAuthorInitials(profileData?.profile?.name || pubkeyToFriendlyName(pubkey))
                 )}
               </div>
 
@@ -248,9 +386,10 @@ export function ProfileModal({
                   )}
                 </div>
 
+                {/* Hyperlinked Bio */}
                 {profileData?.profile?.bio && (
-                  <p className="text-sm text-neutral-700 dark:text-neutral-300 mt-1 whitespace-pre-wrap leading-relaxed">
-                    {profileData.profile.bio}
+                  <p className="text-[14px] text-neutral-700 dark:text-neutral-300 mt-1 whitespace-pre-wrap leading-relaxed">
+                    {renderBioWithLinks(profileData.profile.bio)}
                   </p>
                 )}
 
@@ -258,6 +397,7 @@ export function ProfileModal({
                   <button
                     onClick={handleCopyPubkey}
                     className="text-xs text-neutral-500 hover:text-black dark:hover:text-white flex items-center gap-1 border border-neutral-200 dark:border-neutral-800 px-2 py-0.5 transition-colors"
+                    title="Copy identifier"
                   >
                     {copiedKey ? (
                       <Check className="w-3 h-3 text-emerald-500" />
