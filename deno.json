@@ -1,0 +1,7 @@
+{
+  "nodeModulesDir": "auto",
+  "deploy": {
+    "org": "uriva",
+    "app": "written"
+  }
+}
