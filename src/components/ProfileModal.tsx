@@ -183,30 +183,40 @@ export function ProfileModal({
     }
   };
 
-  // Helper to hyperlinkify URLs in bio text
+  // Helper to hyperlinkify URLs in bio text (supports https://, http://, www., and domain.tld like uriv.me)
   const renderBioWithLinks = (text: string) => {
-    const urlRegex = /(https?:\/\/[^\s]+)/gu;
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/gu;
     const parts = [];
     let lastIndex = 0;
     let match;
 
     while ((match = urlRegex.exec(text)) !== null) {
       const matchStart = match.index;
-      const matchEnd = matchStart + match[0].length;
+      let raw = match[0];
+      let trailing = "";
+      const trailMatch = raw.match(/[.,;:!?)]+$/);
+      if (trailMatch) {
+        trailing = trailMatch[0];
+        raw = raw.slice(0, -trailing.length);
+      }
 
       if (matchStart > lastIndex) {
         parts.push(text.slice(lastIndex, matchStart));
       }
 
-      const url = match[0];
-      const displayUrl = url
+      let href = raw;
+      if (!href.startsWith("http://") && !href.startsWith("https://")) {
+        href = "https://" + href;
+      }
+
+      const displayUrl = raw
         .replace(/^https?:\/\/(www\.)?/, "")
         .replace(/\/$/, "");
 
       parts.push(
         <a
           key={`bio-link-${matchStart}`}
-          href={url}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
@@ -216,7 +226,11 @@ export function ProfileModal({
         </a>
       );
 
-      lastIndex = matchEnd;
+      if (trailing) {
+        parts.push(trailing);
+      }
+
+      lastIndex = matchStart + match[0].length;
     }
 
     if (lastIndex < text.length) {

@@ -72,24 +72,33 @@ export function PostCard({
     ? getAuthorInitials(displayName)
     : "A";
 
-  // Render content with interactive hashtags and links
+  // Render content with interactive hashtags and links (including domains like uriv.me)
   const renderFormattedContent = (text: string) => {
-    const tokenRegex = /(#[a-zA-Z0-9_\p{L}]+|https?:\/\/[^\s]+)/gu;
+    const tokenRegex = /(#[a-zA-Z0-9_\p{L}]+|https?:\/\/[^\s]+|www\.[^\s]+|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/gu;
     const parts = [];
     let lastIndex = 0;
     let match;
 
     while ((match = tokenRegex.exec(text)) !== null) {
       const matchStart = match.index;
-      const matchEnd = matchStart + match[0].length;
+      let raw = match[0];
+      let trailing = "";
+
+      // Strip trailing punctuation if it's not a hashtag
+      if (!raw.startsWith("#")) {
+        const trailMatch = raw.match(/[.,;:!?)]+$/);
+        if (trailMatch) {
+          trailing = trailMatch[0];
+          raw = raw.slice(0, -trailing.length);
+        }
+      }
 
       if (matchStart > lastIndex) {
         parts.push(text.slice(lastIndex, matchStart));
       }
 
-      const token = match[0];
-      if (token.startsWith("#")) {
-        const tagName = token.slice(1).toLowerCase();
+      if (raw.startsWith("#")) {
+        const tagName = raw.slice(1).toLowerCase();
         parts.push(
           <button
             key={`tag-${matchStart}`}
@@ -99,25 +108,33 @@ export function PostCard({
             }}
             className="text-neutral-900 dark:text-neutral-100 font-semibold hover:underline cursor-pointer"
           >
-            {token}
+            {raw}
           </button>
         );
-      } else if (token.startsWith("http")) {
+      } else {
+        let href = raw;
+        if (!href.startsWith("http://") && !href.startsWith("https://")) {
+          href = "https://" + href;
+        }
         parts.push(
           <a
             key={`link-${matchStart}`}
-            href={token}
+            href={href}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
             className="text-neutral-600 dark:text-neutral-400 underline underline-offset-2 hover:text-black dark:hover:text-white"
           >
-            {token.length > 35 ? `${token.slice(0, 32)}…` : token}
+            {raw.length > 35 ? `${raw.slice(0, 32)}…` : raw}
           </a>
         );
       }
 
-      lastIndex = matchEnd;
+      if (trailing) {
+        parts.push(trailing);
+      }
+
+      lastIndex = matchStart + match[0].length;
     }
 
     if (lastIndex < text.length) {
