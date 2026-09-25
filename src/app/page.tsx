@@ -1,27 +1,27 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { db } from "@/lib/db";
 import { Header } from "@/components/Header";
-import { HeroManifesto } from "@/components/HeroManifesto";
 import { Composer } from "@/components/Composer";
 import { PostCard, PostItem } from "@/components/PostCard";
 import { EditPostModal } from "@/components/EditPostModal";
-import { ThreadModal } from "@/components/ThreadModal";
 import { ProfileModal } from "@/components/ProfileModal";
 import { SettingsModal } from "@/components/SettingsModal";
 import { ApiExplorerModal } from "@/components/ApiExplorerModal";
 import { TagsModal } from "@/components/TagsModal";
-import { Filter, Sparkles, Hash, ShieldCheck, ShieldAlert, Layers } from "lucide-react";
+import { ShieldCheck, ShieldAlert } from "lucide-react";
 
 export default function HomePage() {
+  const router = useRouter();
+
   // Modal states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isApiDocsOpen, setIsApiDocsOpen] = useState(false);
   const [isTagsOpen, setIsTagsOpen] = useState(false);
   const [profilePubkey, setProfilePubkey] = useState<string | null>(null);
   const [editingPost, setEditingPost] = useState<PostItem | null>(null);
-  const [threadPost, setThreadPost] = useState<PostItem | null>(null);
   const [replyingTo, setReplyingTo] = useState<{
     id: string;
     content: string;
@@ -103,9 +103,6 @@ export default function HomePage() {
       />
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-6">
-        {/* Manifesto / Hero */}
-        <HeroManifesto />
-
         {/* Composer */}
         <Composer
           replyToPost={replyingTo}
@@ -199,7 +196,7 @@ export default function HomePage() {
                 onEdit={(p) => setEditingPost(p)}
                 onSelectTag={(tag) => setActiveTag(tag)}
                 onViewAuthorProfile={(pubkey) => setProfilePubkey(pubkey)}
-                onViewThread={(p) => setThreadPost(p)}
+                onViewThread={(p) => router.push(`/post/${p.id}`)}
               />
             ))}
           </div>
@@ -207,13 +204,27 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-neutral-200 dark:border-neutral-800 py-6 mt-12 bg-white dark:bg-black font-mono text-xs text-neutral-500">
+      <footer className="border-t border-neutral-200 dark:border-neutral-800 py-6 mt-12 bg-white dark:bg-black text-xs text-neutral-500">
         <div className="max-w-2xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="font-bold text-black dark:text-white">written</span>
+            <span className="text-neutral-400">•</span>
+            <span className="text-neutral-400">No accounts. Just write.</span>
           </div>
 
           <div className="flex items-center gap-4">
+            <a
+              href="/privacy"
+              className="hover:text-black dark:hover:text-white underline underline-offset-2"
+            >
+              Privacy
+            </a>
+            <a
+              href="/terms"
+              className="hover:text-black dark:hover:text-white underline underline-offset-2"
+            >
+              Terms
+            </a>
             <button
               onClick={() => setIsApiDocsOpen(true)}
               className="hover:text-black dark:hover:text-white underline underline-offset-2"
@@ -245,21 +256,12 @@ export default function HomePage() {
         onClose={() => setEditingPost(null)}
       />
 
-      <ThreadModal
-        post={threadPost}
-        isOpen={Boolean(threadPost)}
-        onClose={() => setThreadPost(null)}
-        onEditPost={(p) => setEditingPost(p)}
-        onSelectTag={(tag) => setActiveTag(tag)}
-        onViewAuthorProfile={(pubkey) => setProfilePubkey(pubkey)}
-      />
-
       <ProfileModal
         pubkey={profilePubkey}
         isOpen={Boolean(profilePubkey)}
         onClose={() => setProfilePubkey(null)}
         onSelectTag={(tag) => setActiveTag(tag)}
-        onViewThread={(p) => setThreadPost(p)}
+        onViewThread={(p) => router.push(`/post/${p.id}`)}
       />
 
       <SettingsModal

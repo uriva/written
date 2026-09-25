@@ -56,6 +56,10 @@ export function Header({
             </span>
           </a>
 
+          <span className="hidden md:inline text-xs text-neutral-400">
+            No accounts. Just write.
+          </span>
+
           {activeTag && (
             <div className="flex items-center gap-1 bg-black text-white dark:bg-white dark:text-black font-mono text-xs px-2 py-0.5">
               <span>#{activeTag}</span>
