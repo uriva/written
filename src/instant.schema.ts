@@ -37,6 +37,33 @@ const _schema = i.schema({
       createdAt: i.number(),
       updatedAt: i.number(),
     }),
+    webhooks: i.entity({
+      ownerPubkey: i.string().indexed(),
+      url: i.string(),
+      secret: i.string(),
+      description: i.string().optional(),
+      filters: i.string(), // JSON: { keywords, tags, authors, replyToId, rootId }
+      active: i.boolean().indexed(),
+      createdAt: i.number().indexed(),
+      updatedAt: i.number().indexed(),
+      lastDeliveryAt: i.number().optional(),
+      failureCount: i.number().optional(),
+      disabledReason: i.string().optional(),
+    }),
+    webhookDeliveries: i.entity({
+      webhookId: i.string().indexed(),
+      ownerPubkey: i.string().indexed(),
+      event: i.string().indexed(),
+      payload: i.string(),
+      status: i.string().indexed(), // pending | success | failed | skipped
+      attempts: i.number(),
+      responseStatus: i.number().optional(),
+      error: i.string().optional(),
+      createdAt: i.number().indexed(),
+      updatedAt: i.number(),
+      nextAttemptAt: i.number().indexed(),
+      deliveredAt: i.number().optional(),
+    }),
   },
   links: {
     postAuthorProfile: {

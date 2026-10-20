@@ -9,26 +9,44 @@ const rules = {
   },
   posts: {
     allow: {
+      // Reads are public; all writes go through the server API, which
+      // validates signatures and enforces rate limits.
       view: "true",
-      create: "true",
-      update: "true",
-      delete: "true",
+      create: "false",
+      update: "false",
+      delete: "false",
     },
   },
   tags: {
     allow: {
       view: "true",
-      create: "true",
-      update: "true",
-      delete: "true",
+      create: "false",
+      update: "false",
+      delete: "false",
     },
   },
   profiles: {
     allow: {
       view: "true",
-      create: "true",
-      update: "true",
-      delete: "true",
+      create: "false",
+      update: "false",
+      delete: "false",
+    },
+  },
+  webhooks: {
+    allow: {
+      view: "false",
+      create: "false",
+      update: "false",
+      delete: "false",
+    },
+  },
+  webhookDeliveries: {
+    allow: {
+      view: "false",
+      create: "false",
+      update: "false",
+      delete: "false",
     },
   },
   userKeys: {

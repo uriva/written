@@ -1,0 +1,32 @@
+name: Webhook retries
+
+# Vercel's Hobby plan only allows a daily cron, so this workflow drives the
+# retry sweep more often. Set the repository variable WRITTEN_SITE_URL and the
+# secret CRON_SECRET to enable it. Without them the job is a no-op.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: webhook-retries
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger retry sweep
+        env:
+          SITE_URL: ${{ vars.WRITTEN_SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$SITE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "WRITTEN_SITE_URL or CRON_SECRET is not configured; skipping."
+            exit 0
+          fi
+          curl -fsS -X POST "$SITE_URL/api/cron/webhooks?limit=50" \
+            -H "Authorization: Bearer $CRON_SECRET"
+          echo
+          echo "Sweep complete."

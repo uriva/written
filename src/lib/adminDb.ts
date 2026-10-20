@@ -12,17 +12,42 @@ import {
 export const APP_ID =
   process.env.NEXT_PUBLIC_INSTANT_APP_ID || "fe53f2bb-9774-47db-9ed6-8c7c2dab43a5";
 
-export const ADMIN_TOKEN =
-  process.env.INSTANT_APP_ADMIN_TOKEN || "a1b3282a-638f-4328-8912-0240d404d104";
-
 export const API_URI =
   process.env.NEXT_PUBLIC_INSTANT_API_URI || "https://api.instantdb.uriv.me";
 
-export const adminDb = init({
-  appId: APP_ID,
-  adminToken: ADMIN_TOKEN,
-  apiURI: API_URI,
-  schema,
+/**
+ * The admin token is a server-only secret. It must be provided via the
+ * environment; it is deliberately not hardcoded here (this repo is public).
+ */
+function createAdminDb() {
+  const adminToken = process.env.INSTANT_APP_ADMIN_TOKEN?.trim();
+  if (!adminToken) {
+    throw new Error(
+      "INSTANT_APP_ADMIN_TOKEN is not set. Add it to .env.local (see .env.example) or your deployment environment."
+    );
+  }
+  return init({ appId: APP_ID, adminToken, apiURI: API_URI, schema });
+}
+
+type AdminDb = ReturnType<typeof createAdminDb>;
+
+let cachedAdminDb: AdminDb | null = null;
+
+export function getAdminDb(): AdminDb {
+  if (!cachedAdminDb) cachedAdminDb = createAdminDb();
+  return cachedAdminDb;
+}
+
+/**
+ * Lazily initialised so builds don't require secrets and so a missing token
+ * produces a clear runtime error instead of a build-time crash.
+ */
+export const adminDb = new Proxy({} as AdminDb, {
+  get(_target, prop) {
+    const db = getAdminDb() as unknown as Record<string | symbol, unknown>;
+    const value = db[prop];
+    return typeof value === "function" ? value.bind(db) : value;
+  },
 });
 
 export { id };
@@ -50,6 +75,47 @@ export interface ProfileInput {
   avatar?: string | null;
   signature?: string | null;
   updatedAt?: number;
+}
+
+export function parseTags(tags: unknown): string[] {
+  if (!tags) return [];
+  if (Array.isArray(tags)) return tags as string[];
+  if (typeof tags !== "string") return [];
+  try {
+    const parsed = JSON.parse(tags);
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+async function buildTagTransactions(txs: any[], tagNames: string[], delta: 1 | -1) {
+  for (const tagName of tagNames) {
+    const tagRes = await adminDb.query({
+      tags: {
+        $: { where: { name: tagName }, limit: 1 },
+      },
+    });
+    const existingTag = tagRes.tags?.[0];
+
+    if (existingTag) {
+      const postCount = Math.max(0, (existingTag.postCount || 0) + delta);
+      txs.push(
+        adminDb.tx.tags[existingTag.id].update({
+          postCount,
+          updatedAt: Date.now(),
+        })
+      );
+    } else if (delta > 0) {
+      txs.push(
+        adminDb.tx.tags[id()].create({
+          name: tagName,
+          postCount: 1,
+          updatedAt: Date.now(),
+        })
+      );
+    }
+  }
 }
 
 export async function createPostServer(input: CreatePostInput) {
@@ -102,13 +168,14 @@ export async function createPostServer(input: CreatePostInput) {
   if (replyToId) {
     const parentQuery = await adminDb.query({
       posts: {
-        $: { where: { id: replyToId } },
+        $: { where: { id: replyToId }, limit: 1 },
       },
     });
     const parentPost = parentQuery.posts?.[0];
-    if (parentPost) {
-      rootId = parentPost.rootId || parentPost.id;
+    if (!parentPost) {
+      throw new Error(`Parent post not found: ${replyToId}`);
     }
+    rootId = parentPost.rootId || parentPost.id;
   }
 
   const txs: any[] = [
@@ -143,31 +210,7 @@ export async function createPostServer(input: CreatePostInput) {
   }
 
   // Update or create tags
-  for (const tagName of tagsList) {
-    const tagRes = await adminDb.query({
-      tags: {
-        $: { where: { name: tagName } },
-      },
-    });
-    if (tagRes.tags?.[0]) {
-      const existingTag = tagRes.tags[0];
-      txs.push(
-        adminDb.tx.tags[existingTag.id].update({
-          postCount: (existingTag.postCount || 1) + 1,
-          updatedAt: Date.now(),
-        })
-      );
-    } else {
-      const tagId = id();
-      txs.push(
-        adminDb.tx.tags[tagId].create({
-          name: tagName,
-          postCount: 1,
-          updatedAt: Date.now(),
-        })
-      );
-    }
-  }
+  await buildTagTransactions(txs, tagsList, 1);
 
   await adminDb.transact(txs);
 
@@ -247,7 +290,11 @@ export async function editPostServer(input: EditPostInput) {
   const newTagsList = extractHashtags(newContent);
   const tagsJson = JSON.stringify(newTagsList);
 
-  await adminDb.transact([
+  const oldTagsList = parseTags(post.tags);
+  const addedTags = newTagsList.filter((t) => !oldTagsList.includes(t));
+  const removedTags = oldTagsList.filter((t) => !newTagsList.includes(t));
+
+  const txs: any[] = [
     adminDb.tx.posts[post.id].update({
       content: newContent,
       updatedAt,
@@ -255,14 +302,23 @@ export async function editPostServer(input: EditPostInput) {
       editHistory: JSON.stringify(editHistory),
       tags: tagsJson,
     }),
-  ]);
+  ];
+
+  await buildTagTransactions(txs, removedTags, -1);
+  await buildTagTransactions(txs, addedTags, 1);
+
+  await adminDb.transact(txs);
 
   return {
     id: post.id,
     content: newContent,
+    createdAt: post.createdAt,
     updatedAt,
     authorPubkey: post.authorPubkey,
+    signed: true,
     signature: input.signature,
+    replyToId: post.replyToId || null,
+    rootId: post.rootId || post.id,
     tags: newTagsList,
     editHistoryCount: editHistory.length,
   };

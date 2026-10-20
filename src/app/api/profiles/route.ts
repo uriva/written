@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { upsertProfileServer } from "@/lib/adminDb";
+import { emitEvent } from "@/lib/webhooks";
+import { getClientIp, rateLimit } from "@/lib/rateLimit";
+import { getOrigin } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  const limit = rateLimit(`profiles:update:${getClientIp(req)}`, 10, 60_000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Rate limit exceeded. Please wait before updating your profile again.",
+        retryAfterSeconds: limit.retryAfterSeconds,
+      },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const headerPubkey = req.headers.get("x-written-pubkey");
@@ -31,6 +46,24 @@ export async function POST(req: NextRequest) {
       signature,
       updatedAt,
     });
+
+    await emitEvent(
+      {
+        type: "profile.updated",
+        data: {
+          profile: {
+            pubkey: profile.pubkey,
+            name: profile.name,
+            bio: profile.bio || null,
+            avatar: profile.avatar || null,
+            updatedAt: profile.updatedAt,
+          },
+        },
+        content: `${profile.name} ${profile.bio || ""}`.trim(),
+        authorPubkey: profile.pubkey,
+      },
+      { origin: getOrigin(req) }
+    );
 
     return NextResponse.json({ success: true, profile });
   } catch (error: any) {

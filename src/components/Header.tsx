@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useIdentity } from "@/lib/useIdentity";
 import { useTheme } from "@/lib/useTheme";
 import {
@@ -38,7 +39,7 @@ export function Header({
       <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
         {/* Brand */}
         <div className="flex items-center gap-3">
-          <a
+          <Link
             href="/"
             className="flex items-center gap-2 group focus:outline-none"
             onClick={(e) => {
@@ -54,7 +55,7 @@ export function Header({
             <span className="font-mono font-bold text-lg tracking-tight text-black dark:text-white">
               written
             </span>
-          </a>
+          </Link>
 
           <span className="hidden md:inline text-xs text-neutral-400">
             No accounts. Just write.

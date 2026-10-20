@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, createPostServer } from "@/lib/adminDb";
+import { emitEvent } from "@/lib/webhooks";
+import { getClientIp, rateLimit } from "@/lib/rateLimit";
+import { getOrigin } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+function parseNumber(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,36 +19,54 @@ export async function GET(req: NextRequest) {
     const tag = searchParams.get("tag")?.toLowerCase().replace(/^#/, "");
     const author = searchParams.get("author")?.toLowerCase();
     const replyTo = searchParams.get("replyTo");
-    const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
+    const topLevel = searchParams.get("topLevel") === "true";
+    const q = searchParams.get("q")?.trim().toLowerCase();
+    const before = parseNumber(searchParams.get("before"));
+    const since = parseNumber(searchParams.get("since"));
+    const requestedLimit = parseInt(searchParams.get("limit") || "50", 10);
+    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 50, 1), 100);
+    const order: "asc" | "desc" =
+      searchParams.get("order") === "asc" || (since && !searchParams.get("order"))
+        ? "asc"
+        : "desc";
 
-    const whereClause: any = {};
-    if (author) {
-      whereClause.authorPubkey = author;
-    }
+    const whereClause: Record<string, any> = {};
+    if (author) whereClause.authorPubkey = author;
     if (replyTo !== null && replyTo !== undefined) {
       whereClause.replyToId = replyTo;
     }
+    if (before) whereClause.createdAt = { $lt: before };
+    if (since) {
+      whereClause.createdAt = { ...(whereClause.createdAt || {}), $gt: since };
+    }
+
+    // Keyword search is applied in memory because `content` is not indexed.
+    // Fetch a larger window so matches aren't missed by the SQL limit.
+    const fetchLimit = q ? 300 : limit;
 
     const { posts } = await adminDb.query({
       posts: {
         $: {
-          where: Object.keys(whereClause).length > 0 ? whereClause : undefined,
-          order: { createdAt: "desc" },
-          limit,
+          where: (Object.keys(whereClause).length > 0 ? whereClause : undefined) as any,
+          order: { createdAt: order },
+          limit: fetchLimit,
         },
         profile: {},
         replies: {},
       },
     });
 
-    let results = posts || [];
+    let results: any[] = posts || [];
 
-    // Filter by tag if specified
+    if (topLevel) {
+      results = results.filter((post) => !post.replyToId);
+    }
+
     if (tag) {
-      results = results.filter((p: any) => {
-        if (!p.tags) return false;
+      results = results.filter((post) => {
+        if (!post.tags) return false;
         try {
-          const parsed = JSON.parse(p.tags);
+          const parsed = JSON.parse(post.tags);
           return Array.isArray(parsed) && parsed.includes(tag);
         } catch {
           return false;
@@ -46,28 +74,39 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    if (q) {
+      results = results.filter((post) =>
+        String(post.content || "").toLowerCase().includes(q)
+      );
+    }
+
+    results = results.slice(0, limit);
+    const last = results[results.length - 1];
+
     return NextResponse.json({
       success: true,
       count: results.length,
-      posts: results.map((p: any) => ({
-        id: p.id,
-        content: p.content,
-        authorPubkey: p.authorPubkey || null,
-        signed: Boolean(p.signed),
-        signature: p.signature || null,
-        createdAt: p.createdAt,
-        updatedAt: p.updatedAt || null,
-        replyToId: p.replyToId || null,
-        rootId: p.rootId || p.id,
-        tags: p.tags ? JSON.parse(p.tags) : [],
-        profile: p.profile
+      nextCursor: results.length === limit && last ? last.createdAt : null,
+      order,
+      posts: results.map((post: any) => ({
+        id: post.id,
+        content: post.content,
+        authorPubkey: post.authorPubkey || null,
+        signed: Boolean(post.signed),
+        signature: post.signature || null,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt || null,
+        replyToId: post.replyToId || null,
+        rootId: post.rootId || post.id,
+        tags: post.tags ? JSON.parse(post.tags) : [],
+        profile: post.profile
           ? {
-              name: p.profile.name,
-              bio: p.profile.bio || null,
-              avatar: p.profile.avatar || null,
+              name: post.profile.name,
+              bio: post.profile.bio || null,
+              avatar: post.profile.avatar || null,
             }
           : null,
-        repliesCount: p.replies?.length || 0,
+        repliesCount: post.replies?.length || 0,
       })),
     });
   } catch (error: any) {
@@ -79,6 +118,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const limit = rateLimit(`posts:create:${getClientIp(req)}`, 20, 60_000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Rate limit exceeded. Please wait before posting again.",
+        retryAfterSeconds: limit.retryAfterSeconds,
+      },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const headerPubkey = req.headers.get("x-written-pubkey");
@@ -105,14 +156,44 @@ export async function POST(req: NextRequest) {
       replyToId,
     });
 
+    await emitEvent(
+      {
+        type: "post.created",
+        data: {
+          post: {
+            id: post.id,
+            content: post.content,
+            authorPubkey: post.authorPubkey,
+            signed: post.signed,
+            signature: post.signature,
+            createdAt: post.createdAt,
+            replyToId: post.replyToId,
+            rootId: post.rootId,
+            tags: post.tags,
+            profile: null,
+          },
+        },
+        content: post.content,
+        tags: post.tags,
+        authorPubkey: post.authorPubkey || undefined,
+        replyToId: post.replyToId || undefined,
+        rootId: post.rootId || undefined,
+      },
+      { origin: getOrigin(req) }
+    );
+
     return NextResponse.json({ success: true, post }, { status: 201 });
   } catch (error: any) {
+    const message = error.message || "Failed to create post";
     const isClientError =
-      error.message?.includes("signature") ||
-      error.message?.includes("Invalid") ||
-      error.message?.includes("cannot be empty");
+      message.includes("signature") ||
+      message.includes("Invalid") ||
+      message.includes("cannot be empty") ||
+      message.includes("exceeds") ||
+      message.includes("not found");
+
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to create post" },
+      { success: false, error: message },
       { status: isClientError ? 400 : 500 }
     );
   }

@@ -20,9 +20,11 @@ import {
   Cloud,
   LogOut,
   AlertTriangle,
+  Webhook,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatShortKey } from "@/lib/crypto";
+import { WebhooksPanel } from "@/components/WebhooksPanel";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -236,6 +238,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
             </form>
           )}
+
+          {/* Webhooks */}
+          <section className="space-y-3 pt-3 border-t border-neutral-200 dark:border-neutral-800">
+            <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-900 pb-1.5">
+              <span className="font-mono text-xs font-bold uppercase text-neutral-500 flex items-center gap-1.5">
+                <Webhook className="w-3.5 h-3.5" />
+                <span>Webhooks</span>
+              </span>
+            </div>
+            <WebhooksPanel />
+          </section>
 
           {/* Email Key Backup (InstantDB Account Auth) */}
           <section className="space-y-3 pt-3 border-t border-neutral-200 dark:border-neutral-800">

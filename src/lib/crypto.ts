@@ -101,6 +101,15 @@ export function buildProfileCanonicalMessage(params: {
   return `WRITTEN_PROFILE:${params.pubkey.toLowerCase()}:${params.name.trim()}:${(params.bio || "").trim()}:${(params.avatar || "").trim()}:${params.updatedAt}`;
 }
 
+// Webhook management actions are authenticated with the same Ed25519 keys.
+export function buildWebhookCanonicalMessage(params: {
+  action: string;
+  target: string;
+  timestamp: number;
+}): string {
+  return `WRITTEN_WEBHOOK:${params.action}:${params.target}:${params.timestamp}`;
+}
+
 // Hashtag extraction
 export function extractHashtags(text: string): string[] {
   if (!text) return [];

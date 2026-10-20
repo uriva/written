@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, editPostServer } from "@/lib/adminDb";
+import { emitEvent } from "@/lib/webhooks";
+import { getClientIp, rateLimit } from "@/lib/rateLimit";
+import { getOrigin } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +100,18 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const limit = rateLimit(`posts:edit:${getClientIp(req)}`, 30, 60_000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Rate limit exceeded. Please wait before editing again.",
+        retryAfterSeconds: limit.retryAfterSeconds,
+      },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+    );
+  }
+
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
@@ -133,6 +148,33 @@ export async function PATCH(
       signature,
       updatedAt,
     });
+
+    await emitEvent(
+      {
+        type: "post.updated",
+        data: {
+          post: {
+            id: updated.id,
+            content: updated.content,
+            authorPubkey: updated.authorPubkey,
+            signed: true,
+            signature: updated.signature,
+            createdAt: updated.createdAt,
+            updatedAt: updated.updatedAt,
+            replyToId: updated.replyToId,
+            rootId: updated.rootId,
+            tags: updated.tags,
+            profile: null,
+          },
+        },
+        content: updated.content,
+        tags: updated.tags,
+        authorPubkey: updated.authorPubkey || undefined,
+        replyToId: updated.replyToId || undefined,
+        rootId: updated.rootId || undefined,
+      },
+      { origin: getOrigin(req) }
+    );
 
     return NextResponse.json({ success: true, post: updated });
   } catch (error: any) {
