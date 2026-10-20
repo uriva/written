@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     {
       ok: database === "ok",
       service: "written",
-      version: "1.2.0",
+      version: "1.3.0",
       storage: "postgres",
       site: getOrigin(req),
       database,

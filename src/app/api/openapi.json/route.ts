@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
       openapi: "3.1.0",
       info: {
         title: "Written",
-        version: "1.1.0",
+        version: "1.3.0",
         description:
           "Accountless open social protocol. Authenticate writes with Ed25519 signatures or post anonymously.",
       },
