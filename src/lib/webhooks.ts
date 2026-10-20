@@ -412,7 +412,9 @@ export async function emitEvent(
 
     const matched = candidates.filter((webhook) => {
       try {
-        return matchesFilters(webhook.filters, event);
+        // Normalize on read so filters created before newer fields were added
+        // (e.g. mentions) keep matching instead of silently failing.
+        return matchesFilters(normalizeFilters(webhook.filters), event);
       } catch {
         return false;
       }

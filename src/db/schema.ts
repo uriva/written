@@ -30,6 +30,7 @@ export const posts = pgTable(
     replyToId: text("reply_to_id"),
     rootId: text("root_id"),
     tags: text("tags").array().notNull().default([]),
+    mentions: text("mentions").array().notNull().default([]),
     editHistory: jsonb("edit_history")
       .$type<EditHistoryEntry[]>()
       .notNull()
@@ -41,6 +42,7 @@ export const posts = pgTable(
     index("posts_reply_to_idx").on(table.replyToId),
     index("posts_root_idx").on(table.rootId),
     index("posts_tags_idx").using("gin", table.tags),
+    index("posts_mentions_idx").using("gin", table.mentions),
   ]
 );
 

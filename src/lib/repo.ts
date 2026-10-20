@@ -10,6 +10,7 @@ import {
   inArray,
   isNull,
   lt,
+  ne,
   or,
   sql,
   type SQL,
@@ -29,6 +30,7 @@ import {
   isValidPubkey,
   verifyPayload,
 } from "./crypto";
+import { extractMentions } from "./mentions";
 
 export interface PostDTO {
   id: string;
@@ -41,6 +43,7 @@ export interface PostDTO {
   replyToId: string | null;
   rootId: string;
   tags: string[];
+  mentions: string[];
   editHistory?: EditHistoryEntry[];
   profile: {
     name: string;
@@ -89,6 +92,8 @@ export interface ProfileInput {
 export interface ListPostsParams {
   tag?: string | null;
   author?: string | null;
+  mentions?: string | null;
+  excludeAuthor?: string | null;
   replyTo?: string | null;
   topLevel?: boolean;
   q?: string | null;
@@ -143,6 +148,7 @@ function toPostDTO(
     replyToId: row.replyToId ?? null,
     rootId: row.rootId || row.id,
     tags: row.tags ?? [],
+    mentions: row.mentions ?? [],
     profile: toProfileDTO(profile),
     repliesCount,
   };
@@ -205,6 +211,19 @@ export async function listPosts(params: ListPostsParams = {}): Promise<PostDTO[]
   if (params.since) conditions.push(gt(posts.createdAt, params.since));
   if (params.tag) {
     conditions.push(sql`${posts.tags} @> ARRAY[${params.tag.toLowerCase()}]::text[]`);
+  }
+  if (params.mentions) {
+    conditions.push(
+      sql`${posts.mentions} @> ARRAY[${params.mentions.toLowerCase()}]::text[]`
+    );
+  }
+  if (params.excludeAuthor) {
+    conditions.push(
+      or(
+        isNull(posts.authorPubkey),
+        ne(posts.authorPubkey, params.excludeAuthor.toLowerCase())
+      )!
+    );
   }
   if (params.q) {
     conditions.push(ilike(posts.content, `%${params.q}%`));
@@ -343,6 +362,7 @@ export async function createPostServer(input: CreatePostInput): Promise<PostDTO>
     rootId = parent.rootId || parent.id;
   }
   const tagList = extractHashtags(content);
+  const mentionList = extractMentions(content);
   const now = Date.now();
 
   await db.transaction(async (tx) => {
@@ -356,6 +376,7 @@ export async function createPostServer(input: CreatePostInput): Promise<PostDTO>
       replyToId,
       rootId,
       tags: tagList,
+      mentions: mentionList,
       editHistory: [],
     });
 
@@ -378,6 +399,7 @@ export async function createPostServer(input: CreatePostInput): Promise<PostDTO>
       replyToId,
       rootId,
       tags: tagList,
+      mentions: mentionList,
       editHistory: [],
     },
     verifiedPubkey ? profileMap.get(verifiedPubkey) : undefined
@@ -428,6 +450,7 @@ export async function editPostServer(input: EditPostInput): Promise<PostDTO & {
   });
 
   const newTags = extractHashtags(newContent);
+  const newMentions = extractMentions(newContent);
   const oldTags = parseTags(post.tags);
   const addedTags = newTags.filter((tag) => !oldTags.includes(tag));
   const removedTags = oldTags.filter((tag) => !newTags.includes(tag));
@@ -442,6 +465,7 @@ export async function editPostServer(input: EditPostInput): Promise<PostDTO & {
         signature,
         editHistory,
         tags: newTags,
+        mentions: newMentions,
       })
       .where(eq(posts.id, post.id));
 
@@ -453,7 +477,15 @@ export async function editPostServer(input: EditPostInput): Promise<PostDTO & {
 
   return {
     ...toPostDTO(
-      { ...post, content: newContent, updatedAt, signature, editHistory, tags: newTags },
+      {
+        ...post,
+        content: newContent,
+        updatedAt,
+        signature,
+        editHistory,
+        tags: newTags,
+        mentions: newMentions,
+      },
       profileMap.get(post.authorPubkey)
     ),
     editHistoryCount: editHistory.length,
@@ -535,17 +567,35 @@ export async function getProfile(pubkey: string): Promise<{
   profile: ProfileDTO | null;
   postCount: number;
   recentPosts: PostDTO[];
+  mentionCount: number;
+  mentionedPosts: PostDTO[];
 }> {
   const clean = pubkey.toLowerCase().trim();
   const db = getDb();
 
-  const [[profile], [postCountRow], recentPosts] = await Promise.all([
+  const [
+    [profile],
+    [postCountRow],
+    [mentionCountRow],
+    recentPosts,
+    mentionedPosts,
+  ] = await Promise.all([
     db.select().from(profiles).where(eq(profiles.pubkey, clean)).limit(1),
     db
       .select({ value: count() })
       .from(posts)
       .where(eq(posts.authorPubkey, clean)),
+    db
+      .select({ value: count() })
+      .from(posts)
+      .where(
+        and(
+          sql`${posts.mentions} @> ARRAY[${clean}]::text[]`,
+          or(isNull(posts.authorPubkey), ne(posts.authorPubkey, clean))
+        )
+      ),
     listPosts({ author: clean, limit: 50 }),
+    listPosts({ mentions: clean, excludeAuthor: clean, limit: 50 }),
   ]);
 
   return {
@@ -553,6 +603,8 @@ export async function getProfile(pubkey: string): Promise<{
     profile: profile ? toProfileRecord(profile) : null,
     postCount: Number(postCountRow?.value ?? 0),
     recentPosts,
+    mentionCount: Number(mentionCountRow?.value ?? 0),
+    mentionedPosts,
   };
 }
 

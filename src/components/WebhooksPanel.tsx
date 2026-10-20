@@ -25,6 +25,7 @@ interface WebhookFilters {
   keywords?: string[];
   tags?: string[];
   authors?: string[];
+  mentions?: string[];
   replyToId?: string;
   rootId?: string;
 }
@@ -80,6 +81,7 @@ export function WebhooksPanel() {
   const [keywords, setKeywords] = useState("");
   const [tags, setTags] = useState("");
   const [authors, setAuthors] = useState("");
+  const [mentions, setMentions] = useState("");
 
   const publicKey = keypair?.publicKey;
 
@@ -136,13 +138,15 @@ export function WebhooksPanel() {
       keywords: splitList(keywords),
       tags: splitList(tags),
       authors: splitList(authors),
+      mentions: splitList(mentions).map((mention) => mention.replace(/^@/, "")),
     };
     if (
       !filters.keywords?.length &&
       !filters.tags?.length &&
-      !filters.authors?.length
+      !filters.authors?.length &&
+      !filters.mentions?.length
     ) {
-      toast.error("Add at least one keyword, tag, or author to filter on");
+      toast.error("Add at least one keyword, tag, author, or mention to filter on");
       return;
     }
 
@@ -168,6 +172,7 @@ export function WebhooksPanel() {
       setKeywords("");
       setTags("");
       setAuthors("");
+      setMentions("");
       setShowForm(false);
       setRevealedSecrets((current) => ({ ...current, [data.webhook.id]: true }));
       await loadWebhooks();
@@ -273,6 +278,11 @@ export function WebhooksPanel() {
         if (filters.authors?.length) {
           parts.push(filters.authors.map((author) => formatShortKey(author)).join(" or "));
         }
+        if (filters.mentions?.length) {
+          parts.push(
+            `mentions ${filters.mentions.map((mention) => formatShortKey(mention)).join(" or ")}`
+          );
+        }
         if (filters.replyToId) parts.push(`reply to ${filters.replyToId.slice(0, 8)}…`);
         if (filters.rootId) parts.push(`thread ${filters.rootId.slice(0, 8)}…`);
         return parts.join(" · ") || "no filters";
@@ -292,8 +302,8 @@ export function WebhooksPanel() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs text-neutral-500 leading-normal flex-1 pr-3">
-          Receive an HMAC-signed POST when a post matches keywords, hashtags, or a
-          specific author. Signed with {formatShortKey(keypair.publicKey)}.
+          Receive an HMAC-signed POST when a post matches keywords, hashtags,
+          authors, or @mentions. Signed with {formatShortKey(keypair.publicKey)}.
         </p>
         <Button
           type="button"
@@ -320,7 +330,7 @@ export function WebhooksPanel() {
             className="w-full bg-white dark:bg-black border border-neutral-300 dark:border-neutral-700 p-2 font-mono text-xs focus:outline-none focus:border-black dark:focus:border-white text-black dark:text-white"
             required
           />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
             <input
               value={keywords}
               onChange={(event) => setKeywords(event.target.value)}
@@ -337,6 +347,12 @@ export function WebhooksPanel() {
               value={authors}
               onChange={(event) => setAuthors(event.target.value)}
               placeholder="author pubkey(s)"
+              className="w-full bg-white dark:bg-black border border-neutral-300 dark:border-neutral-700 p-2 text-xs focus:outline-none focus:border-black dark:focus:border-white text-black dark:text-white"
+            />
+            <input
+              value={mentions}
+              onChange={(event) => setMentions(event.target.value)}
+              placeholder="mention pubkey(s)"
               className="w-full bg-white dark:bg-black border border-neutral-300 dark:border-neutral-700 p-2 text-xs focus:outline-none focus:border-black dark:focus:border-white text-black dark:text-white"
             />
           </div>

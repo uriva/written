@@ -11,7 +11,13 @@ export async function GET(
   try {
     const { pubkey } = await params;
     const cleanPubkey = pubkey.toLowerCase().trim();
-    const { profile, postCount, recentPosts } = await getProfile(cleanPubkey);
+    const {
+      profile,
+      postCount,
+      recentPosts,
+      mentionCount,
+      mentionedPosts,
+    } = await getProfile(cleanPubkey);
 
     return NextResponse.json({
       success: true,
@@ -25,6 +31,7 @@ export async function GET(
           }
         : null,
       postCount,
+      mentionCount,
       recentPosts: recentPosts.map((post) => ({
         id: post.id,
         content: post.content,
@@ -32,6 +39,18 @@ export async function GET(
         updatedAt: post.updatedAt,
         signed: post.signed,
         tags: post.tags,
+        mentions: post.mentions,
+      })),
+      mentionedPosts: mentionedPosts.map((post) => ({
+        id: post.id,
+        content: post.content,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        signed: post.signed,
+        tags: post.tags,
+        mentions: post.mentions,
+        authorPubkey: post.authorPubkey,
+        profile: post.profile,
       })),
     });
   } catch (error: any) {

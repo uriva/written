@@ -21,6 +21,8 @@ export interface WebhookFilters {
   tags?: string[];
   /** 64-char hex Ed25519 public keys. */
   authors?: string[];
+  /** Only events whose text mentions one of these 64-char hex public keys. */
+  mentions?: string[];
   /** Only events that are direct replies to this post id. */
   replyToId?: string;
   /** Only events inside this thread (root post id). */
@@ -31,6 +33,7 @@ export interface NormalizedWebhookFilters {
   keywords: string[];
   tags: string[];
   authors: string[];
+  mentions: string[];
   replyToId?: string;
   rootId?: string;
 }
@@ -50,6 +53,7 @@ export interface WebhookPost {
   replyToId?: string | null;
   rootId?: string | null;
   tags: string[];
+  mentions?: string[];
   profile?: {
     name: string;
     bio?: string | null;
@@ -79,6 +83,7 @@ export interface WebhookEvent {
   /** Derived fields used for filter matching. */
   content?: string;
   tags?: string[];
+  mentions?: string[];
   authorPubkey?: string;
   replyToId?: string;
   rootId?: string;
@@ -138,7 +143,7 @@ function cleanId(value: unknown, field: string): string | undefined {
 export function normalizeFilters(input: unknown): NormalizedWebhookFilters {
   if (input === undefined || input === null) {
     throw new Error(
-      "A 'filters' object is required. Use at least one of: keywords, tags, authors, replyToId, rootId"
+      "A 'filters' object is required. Use at least one of: keywords, tags, authors, mentions, replyToId, rootId"
     );
   }
   if (typeof input !== "object" || Array.isArray(input)) {
@@ -155,6 +160,9 @@ export function normalizeFilters(input: unknown): NormalizedWebhookFilters {
   const authors = cleanStringList(raw.authors, "authors", 64).map((a) =>
     a.toLowerCase()
   );
+  const mentions = cleanStringList(raw.mentions, "mentions", 65).map((m) =>
+    m.replace(/^@/, "").toLowerCase()
+  );
 
   for (const author of authors) {
     if (!/^[0-9a-f]{64}$/.test(author)) {
@@ -163,17 +171,31 @@ export function normalizeFilters(input: unknown): NormalizedWebhookFilters {
       );
     }
   }
+  for (const mention of mentions) {
+    if (!/^[0-9a-f]{64}$/.test(mention)) {
+      throw new Error(
+        "'filters.mentions' must contain 64-character hex Ed25519 public keys"
+      );
+    }
+  }
 
   const replyToId = cleanId(raw.replyToId, "replyToId");
   const rootId = cleanId(raw.rootId, "rootId");
 
-  if (!keywords.length && !tags.length && !authors.length && !replyToId && !rootId) {
+  if (
+    !keywords.length &&
+    !tags.length &&
+    !authors.length &&
+    !mentions.length &&
+    !replyToId &&
+    !rootId
+  ) {
     throw new Error(
-      "At least one filter is required. Use 'keywords', 'tags', 'authors', 'replyToId' or 'rootId'"
+      "At least one filter is required. Use 'keywords', 'tags', 'authors', 'mentions', 'replyToId' or 'rootId'"
     );
   }
 
-  return { keywords, tags, authors, replyToId, rootId };
+  return { keywords, tags, authors, mentions, replyToId, rootId };
 }
 
 export function parseStoredFilters(json: string | null | undefined): NormalizedWebhookFilters | null {
@@ -200,6 +222,13 @@ export function matchesFilters(
     if (!filters.tags.some((tag) => eventTags.includes(tag))) return false;
   }
 
+  if ((filters.mentions || []).length) {
+    const eventMentions = (event.mentions || []).map((m) => m.toLowerCase());
+    if (!filters.mentions.some((mention) => eventMentions.includes(mention))) {
+      return false;
+    }
+  }
+
   if (filters.keywords.length) {
     const haystack = (event.content || "").toLowerCase();
     if (!filters.keywords.some((keyword) => haystack.includes(keyword))) {
@@ -216,6 +245,9 @@ export function matchesFilters(
 export function describeFilters(filters: NormalizedWebhookFilters): string {
   const parts: string[] = [];
   if (filters.authors.length) parts.push(`authors=${filters.authors.join(",")}`);
+  if ((filters.mentions || []).length) {
+    parts.push(`mentions=${filters.mentions.join(",")}`);
+  }
   if (filters.tags.length) parts.push(`tags=#${filters.tags.join(",#")}`);
   if (filters.keywords.length) parts.push(`keywords="${filters.keywords.join('","')}"`);
   if (filters.replyToId) parts.push(`replyTo=${filters.replyToId}`);

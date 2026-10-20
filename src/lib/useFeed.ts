@@ -14,6 +14,7 @@ interface ApiPost {
   replyToId?: string | null;
   rootId?: string | null;
   tags?: string[] | null;
+  mentions?: string[] | null;
   profile?: { name?: string | null; bio?: string | null; avatar?: string | null } | null;
   replies?: ApiPost[];
   repliesCount?: number;
@@ -32,6 +33,7 @@ export function mapApiPost(post: ApiPost): PostItem {
     replyToId: post.replyToId || null,
     rootId: post.rootId || post.id,
     tags: Array.isArray(post.tags) ? post.tags : [],
+    mentions: Array.isArray(post.mentions) ? post.mentions : [],
     profile: post.profile
       ? {
           name: post.profile.name || null,

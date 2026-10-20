@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const tag = searchParams.get("tag")?.toLowerCase().replace(/^#/, "");
     const author = searchParams.get("author")?.toLowerCase();
+    const mentions = searchParams.get("mentions")?.replace(/^@/, "").toLowerCase();
     const replyToParam = searchParams.get("replyTo");
     const replyTo =
       replyToParam === null ? undefined : replyToParam.trim() || null;
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
     const results = await listPosts({
       tag,
       author,
+      mentions,
       replyTo,
       topLevel,
       q,
@@ -65,6 +67,7 @@ export async function GET(req: NextRequest) {
         replyToId: post.replyToId,
         rootId: post.rootId,
         tags: post.tags,
+        mentions: post.mentions,
         profile: post.profile,
         repliesCount: post.repliesCount ?? 0,
       })),
@@ -130,11 +133,13 @@ export async function POST(req: NextRequest) {
             replyToId: post.replyToId,
             rootId: post.rootId,
             tags: post.tags,
+            mentions: post.mentions,
             profile: post.profile,
           },
         },
         content: post.content,
         tags: post.tags,
+        mentions: post.mentions,
         authorPubkey: post.authorPubkey || undefined,
         replyToId: post.replyToId || undefined,
         rootId: post.rootId || undefined,

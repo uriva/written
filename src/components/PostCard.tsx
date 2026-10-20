@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatTimeAgo } from "@/lib/utils";
 import { useIdentity } from "@/lib/useIdentity";
 import { pubkeyToFriendlyName, getAuthorInitials } from "@/lib/nameGenerator";
+import { MENTION_REGEX_SOURCE, formatMention } from "@/lib/mentions";
 import {
   MessageCircle,
   Pencil,
@@ -24,6 +25,7 @@ export interface PostItem {
   replyToId?: string | null;
   rootId?: string | null;
   tags?: string[];
+  mentions?: string[];
   editHistory?: any[];
   profile?: {
     name?: string | null;
@@ -75,7 +77,10 @@ export function PostCard({
 
   // Render content with interactive hashtags and links (including domains like uriv.me)
   const renderFormattedContent = (text: string) => {
-    const tokenRegex = /(#[a-zA-Z0-9_\p{L}]+|https?:\/\/[^\s]+|www\.[^\s]+|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?)/gu;
+    const tokenRegex = new RegExp(
+      `(${MENTION_REGEX_SOURCE}|#[a-zA-Z0-9_\\p{L}]+|https?:\\/\\/[^\\s]+|www\\.[^\\s]+|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,}(?:\\/[^\\s]*)?)`,
+      "gu"
+    );
     const parts = [];
     let lastIndex = 0;
     let match;
@@ -98,7 +103,20 @@ export function PostCard({
         parts.push(text.slice(lastIndex, matchStart));
       }
 
-      if (raw.startsWith("#")) {
+      if (raw.startsWith("@")) {
+        const pubkey = raw.slice(1).toLowerCase();
+        parts.push(
+          <Link
+            key={`mention-${matchStart}`}
+            href={`/u/${pubkey}`}
+            onClick={(e) => e.stopPropagation()}
+            title={pubkey}
+            className="text-neutral-700 dark:text-neutral-300 font-mono underline underline-offset-2 hover:text-black dark:hover:text-white"
+          >
+            {formatMention(pubkey)}
+          </Link>
+        );
+      } else if (raw.startsWith("#")) {
         const tagName = raw.slice(1).toLowerCase();
         parts.push(
           <button

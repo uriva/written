@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
             parameters: [
               { name: "tag", in: "query", schema: { type: "string" }, description: "Hashtag without #" },
               { name: "author", in: "query", schema: { type: "string" }, description: "64-char hex pubkey" },
+              { name: "mentions", in: "query", schema: { type: "string" }, description: "Only posts mentioning this 64-char hex pubkey" },
               { name: "replyTo", in: "query", schema: { type: "string" }, description: "Parent post id" },
               { name: "topLevel", in: "query", schema: { type: "boolean" }, description: "Only root posts" },
               { name: "q", in: "query", schema: { type: "string" }, description: "Case-insensitive content search" },
@@ -196,6 +197,7 @@ export async function GET(req: NextRequest) {
                           keywords: { type: "array", items: { type: "string" }, description: "Case-insensitive content substrings" },
                           tags: { type: "array", items: { type: "string" } },
                           authors: { type: "array", items: { type: "string" }, description: "64-char hex pubkeys" },
+                          mentions: { type: "array", items: { type: "string" }, description: "64-char hex pubkeys mentioned in the post" },
                           replyToId: { type: "string" },
                           rootId: { type: "string" },
                         },
@@ -259,6 +261,15 @@ export async function GET(req: NextRequest) {
             operationId: "atomFeed",
             parameters: [{ name: "tag", in: "query", schema: { type: "string" } }, { name: "author", in: "query", schema: { type: "string" } }],
             responses: { "200": { description: "Atom feed" } },
+          },
+        },
+        "/api/mcp": {
+          post: {
+            tags: ["meta"],
+            operationId: "mcp",
+            description:
+              "Model Context Protocol server over stateless Streamable HTTP. Send JSON-RPC 2.0 initialize/tools/list/tools/call requests.",
+            responses: { "200": { description: "JSON-RPC response" } },
           },
         },
         "/api/health": {

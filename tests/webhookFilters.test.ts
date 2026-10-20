@@ -94,6 +94,31 @@ test("profile events match on name or bio text", () => {
   assert.equal(matchesFilters(filters, profileEvent), true);
 });
 
+test("mention filters match mentioned keys and ignore others", () => {
+  const filters = normalizeFilters({ mentions: [`@${OTHER_AUTHOR}`] });
+  assert.equal(
+    matchesFilters(filters, event({ mentions: [OTHER_AUTHOR.toUpperCase()] })),
+    true
+  );
+  assert.equal(matchesFilters(filters, event({ mentions: [AUTHOR] })), false);
+  assert.equal(matchesFilters(filters, event()), false);
+});
+
+test("mention and author filters are ANDed", () => {
+  const filters = normalizeFilters({
+    authors: [AUTHOR],
+    mentions: [OTHER_AUTHOR],
+  });
+  assert.equal(
+    matchesFilters(filters, event({ authorPubkey: AUTHOR, mentions: [OTHER_AUTHOR] })),
+    true
+  );
+  assert.equal(
+    matchesFilters(filters, event({ authorPubkey: OTHER_AUTHOR, mentions: [OTHER_AUTHOR] })),
+    false
+  );
+});
+
 test("describeFilters is human readable", () => {
   const description = describeFilters(
     normalizeFilters({ keywords: ["agent"], tags: ["ai"], authors: [AUTHOR] })

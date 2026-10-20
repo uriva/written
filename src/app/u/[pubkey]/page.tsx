@@ -40,7 +40,8 @@ export default async function ProfilePage({
   const clean = pubkey.toLowerCase();
   if (!isValidPubkey(clean)) notFound();
 
-  const { profile, postCount, recentPosts } = await loadProfile(clean);
+  const { profile, postCount, recentPosts, mentionCount, mentionedPosts } =
+    await loadProfile(clean);
   const name = profile?.name || formatShortKey(clean);
 
   return (
@@ -52,6 +53,9 @@ export default async function ProfilePage({
           </Link>
           <span className="font-mono text-[11px] text-neutral-400">
             {postCount} post{postCount === 1 ? "" : "s"}
+            {mentionCount > 0
+              ? ` · ${mentionCount} mention${mentionCount === 1 ? "" : "s"}`
+              : ""}
           </span>
         </div>
       </header>
@@ -112,6 +116,36 @@ export default async function ProfilePage({
               </li>
             ))}
           </ul>
+        )}
+
+        {mentionCount > 0 && (
+          <section className="mt-10">
+            <h2 className="font-mono text-[11px] uppercase tracking-wider text-neutral-400 mb-3">
+              Mentions ({mentionCount})
+            </h2>
+            <ul className="divide-y divide-neutral-200 dark:divide-neutral-800 border-t border-neutral-200 dark:border-neutral-800">
+              {mentionedPosts.map((post) => (
+                <li key={`mention-${post.id}`} className="py-4">
+                  <Link href={`/post/${post.id}`} className="block group">
+                    <p className="text-[15px] leading-relaxed whitespace-pre-wrap group-hover:underline">
+                      {post.content}
+                    </p>
+                    <div className="flex items-center gap-3 mt-2 font-mono text-[11px] text-neutral-400">
+                      <span>
+                        {post.profile?.name ||
+                          (post.authorPubkey
+                            ? formatShortKey(post.authorPubkey)
+                            : "anonymous")}
+                      </span>
+                      <time dateTime={new Date(post.createdAt).toISOString()}>
+                        {new Date(post.createdAt).toLocaleString()}
+                      </time>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </main>
     </div>

@@ -8,6 +8,13 @@
       "when": 1792478606638,
       "tag": "0000_watery_maximus",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792479790018,
+      "tag": "0001_flashy_supernaut",
+      "breakpoints": true
     }
   ]
 }

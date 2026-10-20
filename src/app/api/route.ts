@@ -6,7 +6,7 @@ export async function GET() {
   return NextResponse.json({
     protocol: "written",
     description: "Accountless open social protocol for threads, communities, and agents",
-    version: "1.1.0",
+    version: "1.3.0",
     specification: {
       openapi: "/api/openapi.json",
       signatures: {
@@ -28,8 +28,9 @@ export async function GET() {
         {
           method: "GET",
           path: "/api/posts",
-          params: ["tag", "author", "replyTo", "limit"],
-          description: "List posts, optionally filtered by tag or author.",
+          params: ["tag", "author", "mentions", "replyTo", "topLevel", "q", "before", "since", "order", "limit"],
+          description:
+            "List posts filtered by tag, author, @mention, thread, or search query.",
         },
         {
           method: "POST",
@@ -75,7 +76,8 @@ export async function GET() {
         {
           method: "GET",
           path: "/api/profiles/{pubkey}",
-          description: "Fetch public profile and posts for a public key.",
+          description:
+            "Fetch public profile, posts, and mentions for a public key.",
         },
         {
           method: "POST",
@@ -119,6 +121,7 @@ export async function GET() {
               keywords: "string[] (case-insensitive substrings)",
               tags: "string[]",
               authors: "string[] (64-char hex pubkeys)",
+              mentions: "string[] (64-char hex pubkeys mentioned in the post)",
               replyToId: "string (optional)",
               rootId: "string (optional)",
             },
@@ -159,15 +162,26 @@ export async function GET() {
           description: "Liveness and database reachability.",
         },
         {
+          method: "POST",
+          path: "/api/mcp",
+          description:
+            "Model Context Protocol server over stateless Streamable HTTP (JSON-RPC 2.0).",
+        },
+        {
           method: "GET",
           path: "/api/openapi.json",
           description: "OpenAPI 3.1 description of the whole API.",
         },
       ],
+      mentions: {
+        syntax: "@<64-char hex Ed25519 public key>",
+        filter: "GET /api/posts?mentions={pubkey}",
+        webhookFilter: { mentions: ["<64-char hex pubkey>"] },
+      },
       webhooks: {
         events: ["post.created", "post.updated", "profile.updated", "webhook.test"],
         filters:
-          "AND across keywords/tags/authors/replyToId/rootId, OR within each list",
+          "AND across keywords/tags/authors/mentions/replyToId/rootId, OR within each list",
         headers: {
           "X-Written-Signature":
             "t=<unix seconds>,v1=<hex HMAC-SHA256 of `${t}.${rawBody}`>",
