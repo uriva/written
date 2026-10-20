@@ -1,13 +1,14 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { after } from "next/server";
-import { adminDb, id } from "./adminDb";
+import { and, asc, count, desc, eq, lte } from "drizzle-orm";
+import { getDb } from "@/db";
+import { profiles, webhookDeliveries, webhooks } from "@/db/schema";
 import { signWebhookPayload } from "./webhookSignature";
 import {
   matchesFilters,
   normalizeFilters,
-  parseStoredFilters,
   type NormalizedWebhookFilters,
   type WebhookEvent,
   type WebhookEventType,
@@ -20,36 +21,8 @@ const DELIVERY_TIMEOUT_MS = 8_000;
 const USER_AGENT = "written-webhooks/1.0 (+https://github.com/uriva/written)";
 const BACKOFF_MS = [30_000, 2 * 60_000, 10 * 60_000, 60 * 60_000, 6 * 60 * 60_000];
 
-export interface WebhookRow {
-  id: string;
-  ownerPubkey: string;
-  url: string;
-  secret: string;
-  description?: string | null;
-  filters: string;
-  active: boolean;
-  createdAt: number;
-  updatedAt: number;
-  lastDeliveryAt?: number | null;
-  failureCount?: number | null;
-  disabledReason?: string | null;
-}
-
-export interface DeliveryRow {
-  id: string;
-  webhookId: string;
-  ownerPubkey: string;
-  event: string;
-  payload: string;
-  status: string;
-  attempts: number;
-  responseStatus?: number | null;
-  error?: string | null;
-  createdAt: number;
-  updatedAt: number;
-  nextAttemptAt: number;
-  deliveredAt?: number | null;
-}
+export type WebhookRow = typeof webhooks.$inferSelect;
+export type DeliveryRow = typeof webhookDeliveries.$inferSelect;
 
 export interface DeliveryResult {
   ok: boolean;
@@ -183,10 +156,6 @@ export async function assertSafeWebhookUrl(raw: string): Promise<URL> {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                              Signing helpers                               */
-/* -------------------------------------------------------------------------- */
-
-/* -------------------------------------------------------------------------- */
 /*                                CRUD                                        */
 /* -------------------------------------------------------------------------- */
 
@@ -199,36 +168,37 @@ export async function createWebhook(input: {
   const ownerPubkey = input.ownerPubkey.trim().toLowerCase();
   const url = (await assertSafeWebhookUrl(input.url)).toString();
   const filters = normalizeFilters(input.filters);
+  const db = getDb();
 
-  const { webhooks } = await adminDb.query({
-    webhooks: { $: { where: { ownerPubkey }, limit: MAX_WEBHOOKS_PER_OWNER + 1 } },
-  });
+  const [{ value: existing }] = await db
+    .select({ value: count() })
+    .from(webhooks)
+    .where(eq(webhooks.ownerPubkey, ownerPubkey));
 
-  if ((webhooks?.length || 0) >= MAX_WEBHOOKS_PER_OWNER) {
+  if (Number(existing) >= MAX_WEBHOOKS_PER_OWNER) {
     throw new Error(`Each key can register at most ${MAX_WEBHOOKS_PER_OWNER} webhooks`);
   }
 
-  const webhookId = id();
-  const secret = `whsec_${randomBytes(24).toString("hex")}`;
   const now = Date.now();
+  const [row] = await db
+    .insert(webhooks)
+    .values({
+      id: randomUUID(),
+      ownerPubkey,
+      url,
+      secret: `whsec_${randomBytes(24).toString("hex")}`,
+      description: input.description?.trim() || null,
+      filters,
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+      lastDeliveryAt: null,
+      failureCount: 0,
+      disabledReason: null,
+    })
+    .returning();
 
-  const row = {
-    ownerPubkey,
-    url,
-    secret,
-    description: input.description?.trim() || undefined,
-    filters: JSON.stringify(filters),
-    active: true,
-    createdAt: now,
-    updatedAt: now,
-    lastDeliveryAt: undefined,
-    failureCount: 0,
-    disabledReason: "",
-  };
-
-  await adminDb.transact([adminDb.tx.webhooks[webhookId].create(row)]);
-
-  return { id: webhookId, ...row, filtersObject: filters };
+  return { ...row!, filtersObject: filters };
 }
 
 export function serializeWebhook(webhook: WebhookRow, includeSecret = false) {
@@ -236,11 +206,11 @@ export function serializeWebhook(webhook: WebhookRow, includeSecret = false) {
     id: webhook.id,
     url: webhook.url,
     description: webhook.description || null,
-    filters: parseStoredFilters(webhook.filters),
+    filters: webhook.filters,
     active: Boolean(webhook.active),
-    createdAt: webhook.createdAt,
-    updatedAt: webhook.updatedAt,
-    lastDeliveryAt: webhook.lastDeliveryAt || null,
+    createdAt: Number(webhook.createdAt),
+    updatedAt: Number(webhook.updatedAt),
+    lastDeliveryAt: webhook.lastDeliveryAt ?? null,
     failureCount: webhook.failureCount || 0,
     disabledReason: webhook.disabledReason || null,
     ...(includeSecret ? { secret: webhook.secret } : {}),
@@ -249,20 +219,22 @@ export function serializeWebhook(webhook: WebhookRow, includeSecret = false) {
 
 export async function listWebhooks(ownerPubkey: string): Promise<WebhookRow[]> {
   const owner = ownerPubkey.trim().toLowerCase();
-  const { webhooks } = await adminDb.query({
-    webhooks: {
-      $: { where: { ownerPubkey: owner }, order: { createdAt: "desc" }, limit: 50 },
-    },
-  });
-  return (webhooks || []) as WebhookRow[];
+  return getDb()
+    .select()
+    .from(webhooks)
+    .where(eq(webhooks.ownerPubkey, owner))
+    .orderBy(desc(webhooks.createdAt))
+    .limit(50);
 }
 
 export async function getWebhook(webhookId: string): Promise<WebhookRow | null> {
   if (!webhookId) return null;
-  const { webhooks } = await adminDb.query({
-    webhooks: { $: { where: { id: webhookId }, limit: 1 } },
-  });
-  return ((webhooks || [])[0] as WebhookRow) || null;
+  const [row] = await getDb()
+    .select()
+    .from(webhooks)
+    .where(eq(webhooks.id, webhookId))
+    .limit(1);
+  return row ?? null;
 }
 
 export async function getWebhookForOwner(
@@ -290,28 +262,32 @@ export async function updateWebhook(
   const webhook = await getWebhookForOwner(webhookId, ownerPubkey);
   if (!webhook) throw new Error("Webhook not found");
 
-  const data: Record<string, unknown> = { updatedAt: Date.now() };
+  const data: Partial<typeof webhooks.$inferInsert> = { updatedAt: Date.now() };
 
   if (patch.url !== undefined) {
     data.url = (await assertSafeWebhookUrl(patch.url)).toString();
   }
   if (patch.filters !== undefined) {
-    data.filters = JSON.stringify(normalizeFilters(patch.filters));
+    data.filters = normalizeFilters(patch.filters);
   }
   if (patch.description !== undefined) {
-    data.description = patch.description?.trim() || "";
+    data.description = patch.description?.trim() || null;
   }
   if (patch.active !== undefined) {
     data.active = Boolean(patch.active);
     if (patch.active) {
       data.failureCount = 0;
-      data.disabledReason = "";
+      data.disabledReason = null;
     }
   }
 
-  await adminDb.transact([adminDb.tx.webhooks[webhookId].update(data)]);
+  const [row] = await getDb()
+    .update(webhooks)
+    .set(data)
+    .where(eq(webhooks.id, webhookId))
+    .returning();
 
-  return { ...webhook, ...(data as Partial<WebhookRow>) };
+  return row!;
 }
 
 export async function deleteWebhook(
@@ -321,16 +297,12 @@ export async function deleteWebhook(
   const webhook = await getWebhookForOwner(webhookId, ownerPubkey);
   if (!webhook) throw new Error("Webhook not found");
 
-  const { webhookDeliveries } = await adminDb.query({
-    webhookDeliveries: { $: { where: { webhookId }, limit: 200 } },
+  await getDb().transaction(async (tx) => {
+    await tx
+      .delete(webhookDeliveries)
+      .where(eq(webhookDeliveries.webhookId, webhookId));
+    await tx.delete(webhooks).where(eq(webhooks.id, webhookId));
   });
-
-  const txs: any[] = (webhookDeliveries || []).map((delivery: DeliveryRow) =>
-    adminDb.tx.webhookDeliveries[delivery.id].delete()
-  );
-  txs.push(adminDb.tx.webhooks[webhookId].delete());
-
-  await adminDb.transact(txs);
 }
 
 export async function listDeliveries(
@@ -341,17 +313,12 @@ export async function listDeliveries(
   const webhook = await getWebhookForOwner(webhookId, ownerPubkey);
   if (!webhook) throw new Error("Webhook not found");
 
-  const { webhookDeliveries } = await adminDb.query({
-    webhookDeliveries: {
-      $: {
-        where: { webhookId },
-        order: { createdAt: "desc" },
-        limit: Math.min(Math.max(limit, 1), 100),
-      },
-    },
-  });
-
-  return (webhookDeliveries || []) as DeliveryRow[];
+  return getDb()
+    .select()
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.webhookId, webhookId))
+    .orderBy(desc(webhookDeliveries.createdAt))
+    .limit(Math.min(Math.max(limit, 1), 100));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -374,7 +341,7 @@ function createDeliveryTransition(
   event: WebhookEvent,
   now: number
 ): DeliveryRow {
-  const deliveryId = id();
+  const deliveryId = randomUUID();
   return {
     id: deliveryId,
     webhookId: webhook.id,
@@ -388,9 +355,12 @@ function createDeliveryTransition(
     }),
     status: "pending",
     attempts: 0,
+    responseStatus: null,
+    error: null,
     createdAt: now,
     updatedAt: now,
     nextAttemptAt: now,
+    deliveredAt: null,
   };
 }
 
@@ -398,20 +368,7 @@ async function enqueueDelivery(webhook: WebhookRow, event: WebhookEvent) {
   const now = Date.now();
   const delivery = createDeliveryTransition(webhook, event, now);
 
-  await adminDb.transact([
-    adminDb.tx.webhookDeliveries[delivery.id].create({
-      webhookId: delivery.webhookId,
-      ownerPubkey: delivery.ownerPubkey,
-      event: delivery.event,
-      payload: delivery.payload,
-      status: delivery.status,
-      attempts: delivery.attempts,
-      createdAt: delivery.createdAt,
-      updatedAt: delivery.updatedAt,
-      nextAttemptAt: delivery.nextAttemptAt,
-    }),
-  ]);
-
+  await getDb().insert(webhookDeliveries).values(delivery);
   return delivery;
 }
 
@@ -433,12 +390,11 @@ export async function emitEvent(
     }
 
     if (event.data.post && !event.data.post.profile && event.data.post.authorPubkey) {
-      const { profiles } = await adminDb.query({
-        profiles: {
-          $: { where: { pubkey: event.data.post.authorPubkey.toLowerCase() }, limit: 1 },
-        },
-      });
-      const profile = profiles?.[0];
+      const [profile] = await getDb()
+        .select()
+        .from(profiles)
+        .where(eq(profiles.pubkey, event.data.post.authorPubkey.toLowerCase()))
+        .limit(1);
       if (profile) {
         event.data.post.profile = {
           name: profile.name,
@@ -448,13 +404,18 @@ export async function emitEvent(
       }
     }
 
-    const { webhooks } = await adminDb.query({
-      webhooks: { $: { where: { active: true }, limit: 500 } },
-    });
+    const candidates = await getDb()
+      .select()
+      .from(webhooks)
+      .where(eq(webhooks.active, true))
+      .limit(500);
 
-    const matched = ((webhooks || []) as WebhookRow[]).filter((webhook) => {
-      const filters = parseStoredFilters(webhook.filters);
-      return filters ? matchesFilters(filters, event) : false;
+    const matched = candidates.filter((webhook) => {
+      try {
+        return matchesFilters(webhook.filters, event);
+      } catch {
+        return false;
+      }
     });
 
     if (!matched.length) return { matched: 0, deliveryIds: [] };
@@ -514,41 +475,47 @@ async function markDelivery(
   }
 ) {
   const now = Date.now();
-  await adminDb.transact([
-    adminDb.tx.webhookDeliveries[delivery.id].update({
+  await getDb()
+    .update(webhookDeliveries)
+    .set({
       status,
       updatedAt: now,
       nextAttemptAt: fields.nextAttemptAt ?? now,
-      responseStatus: fields.responseStatus,
-      error: fields.error ? fields.error.slice(0, 1000) : "",
-      deliveredAt: fields.deliveredAt,
-    }),
-  ]);
+      responseStatus: fields.responseStatus ?? null,
+      error: fields.error ? fields.error.slice(0, 1000) : null,
+      deliveredAt: fields.deliveredAt ?? null,
+    })
+    .where(eq(webhookDeliveries.id, delivery.id));
 }
 
 async function markWebhookFailure(webhook: WebhookRow, error: string) {
   const now = Date.now();
   const failureCount = (webhook.failureCount || 0) + 1;
-  const data: Record<string, unknown> = {
-    failureCount,
-    lastDeliveryAt: now,
-    updatedAt: now,
-  };
 
-  if (failureCount >= DISABLE_AFTER_FAILURES) {
-    data.active = false;
-    data.disabledReason = `Auto-disabled after ${failureCount} consecutive delivery failures`;
-  }
+  await getDb()
+    .update(webhooks)
+    .set({
+      failureCount,
+      lastDeliveryAt: now,
+      updatedAt: now,
+      ...(failureCount >= DISABLE_AFTER_FAILURES
+        ? {
+            active: false,
+            disabledReason: `Auto-disabled after ${failureCount} consecutive delivery failures`,
+          }
+        : {}),
+    })
+    .where(eq(webhooks.id, webhook.id));
 
-  await adminDb.transact([adminDb.tx.webhooks[webhook.id].update(data)]);
   console.warn(`[webhooks] delivery failed for ${webhook.id}: ${error}`);
 }
 
 export async function attemptDelivery(deliveryId: string): Promise<DeliveryResult> {
-  const { webhookDeliveries } = await adminDb.query({
-    webhookDeliveries: { $: { where: { id: deliveryId }, limit: 1 } },
-  });
-  const delivery = ((webhookDeliveries || [])[0] as DeliveryRow) || null;
+  const [delivery] = await getDb()
+    .select()
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.id, deliveryId))
+    .limit(1);
 
   if (!delivery) {
     return {
@@ -611,7 +578,6 @@ export async function attemptDelivery(deliveryId: string): Promise<DeliveryResul
     });
 
     responseStatus = response.status;
-    // Consume the body so the connection can be reused.
     await response.text().catch(() => "");
 
     if (response.status >= 200 && response.status < 300) {
@@ -621,14 +587,15 @@ export async function attemptDelivery(deliveryId: string): Promise<DeliveryResul
         deliveredAt: now,
         nextAttemptAt: now,
       });
-      await adminDb.transact([
-        adminDb.tx.webhooks[webhook.id].update({
+      await getDb()
+        .update(webhooks)
+        .set({
           failureCount: 0,
           lastDeliveryAt: now,
           updatedAt: now,
-          disabledReason: "",
-        }),
-      ]);
+          disabledReason: null,
+        })
+        .where(eq(webhooks.id, webhook.id));
       return { ok: true, deliveryId, status: "success", attempts, responseStatus };
     }
 
@@ -673,20 +640,18 @@ export async function dispatchDueDeliveries(limit = 25): Promise<{
   failed: number;
   retrying: number;
 }> {
-  const { webhookDeliveries } = await adminDb.query({
-    webhookDeliveries: {
-      $: {
-        where: { status: "pending" },
-        order: { nextAttemptAt: "asc" },
-        limit: Math.min(Math.max(limit * 2, limit), 200),
-      },
-    },
-  });
-
   const now = Date.now();
-  const due = ((webhookDeliveries || []) as DeliveryRow[])
-    .filter((delivery) => (delivery.nextAttemptAt || 0) <= now)
-    .slice(0, limit);
+  const due = await getDb()
+    .select()
+    .from(webhookDeliveries)
+    .where(
+      and(
+        eq(webhookDeliveries.status, "pending"),
+        lte(webhookDeliveries.nextAttemptAt, now)
+      )
+    )
+    .orderBy(asc(webhookDeliveries.nextAttemptAt))
+    .limit(Math.min(Math.max(limit, 1), 100));
 
   const results = await Promise.allSettled(
     due.map((delivery) => attemptDelivery(delivery.id))

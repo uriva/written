@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, createPostServer } from "@/lib/adminDb";
+import { createPostServer, listPosts } from "@/lib/repo";
 import { emitEvent } from "@/lib/webhooks";
 import { getClientIp, rateLimit } from "@/lib/rateLimit";
 import { getOrigin } from "@/lib/http";
@@ -18,69 +18,35 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const tag = searchParams.get("tag")?.toLowerCase().replace(/^#/, "");
     const author = searchParams.get("author")?.toLowerCase();
-    const replyTo = searchParams.get("replyTo");
+    const replyToParam = searchParams.get("replyTo");
+    const replyTo =
+      replyToParam === null ? undefined : replyToParam.trim() || null;
     const topLevel = searchParams.get("topLevel") === "true";
-    const q = searchParams.get("q")?.trim().toLowerCase();
+    const q = searchParams.get("q")?.trim();
     const before = parseNumber(searchParams.get("before"));
     const since = parseNumber(searchParams.get("since"));
     const requestedLimit = parseInt(searchParams.get("limit") || "50", 10);
-    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 50, 1), 100);
+    const limit = Math.min(
+      Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 50, 1),
+      100
+    );
     const order: "asc" | "desc" =
       searchParams.get("order") === "asc" || (since && !searchParams.get("order"))
         ? "asc"
         : "desc";
 
-    const whereClause: Record<string, any> = {};
-    if (author) whereClause.authorPubkey = author;
-    if (replyTo !== null && replyTo !== undefined) {
-      whereClause.replyToId = replyTo;
-    }
-    if (before) whereClause.createdAt = { $lt: before };
-    if (since) {
-      whereClause.createdAt = { ...(whereClause.createdAt || {}), $gt: since };
-    }
-
-    // Keyword search is applied in memory because `content` is not indexed.
-    // Fetch a larger window so matches aren't missed by the SQL limit.
-    const fetchLimit = q ? 300 : limit;
-
-    const { posts } = await adminDb.query({
-      posts: {
-        $: {
-          where: (Object.keys(whereClause).length > 0 ? whereClause : undefined) as any,
-          order: { createdAt: order },
-          limit: fetchLimit,
-        },
-        profile: {},
-        replies: {},
-      },
+    const results = await listPosts({
+      tag,
+      author,
+      replyTo,
+      topLevel,
+      q,
+      before,
+      since,
+      limit,
+      order,
     });
 
-    let results: any[] = posts || [];
-
-    if (topLevel) {
-      results = results.filter((post) => !post.replyToId);
-    }
-
-    if (tag) {
-      results = results.filter((post) => {
-        if (!post.tags) return false;
-        try {
-          const parsed = JSON.parse(post.tags);
-          return Array.isArray(parsed) && parsed.includes(tag);
-        } catch {
-          return false;
-        }
-      });
-    }
-
-    if (q) {
-      results = results.filter((post) =>
-        String(post.content || "").toLowerCase().includes(q)
-      );
-    }
-
-    results = results.slice(0, limit);
     const last = results[results.length - 1];
 
     return NextResponse.json({
@@ -88,25 +54,19 @@ export async function GET(req: NextRequest) {
       count: results.length,
       nextCursor: results.length === limit && last ? last.createdAt : null,
       order,
-      posts: results.map((post: any) => ({
+      posts: results.map((post) => ({
         id: post.id,
         content: post.content,
-        authorPubkey: post.authorPubkey || null,
-        signed: Boolean(post.signed),
-        signature: post.signature || null,
+        authorPubkey: post.authorPubkey,
+        signed: post.signed,
+        signature: post.signature,
         createdAt: post.createdAt,
-        updatedAt: post.updatedAt || null,
-        replyToId: post.replyToId || null,
-        rootId: post.rootId || post.id,
-        tags: post.tags ? JSON.parse(post.tags) : [],
-        profile: post.profile
-          ? {
-              name: post.profile.name,
-              bio: post.profile.bio || null,
-              avatar: post.profile.avatar || null,
-            }
-          : null,
-        repliesCount: post.replies?.length || 0,
+        updatedAt: post.updatedAt,
+        replyToId: post.replyToId,
+        rootId: post.rootId,
+        tags: post.tags,
+        profile: post.profile,
+        repliesCount: post.repliesCount ?? 0,
       })),
     });
   } catch (error: any) {
@@ -170,7 +130,7 @@ export async function POST(req: NextRequest) {
             replyToId: post.replyToId,
             rootId: post.rootId,
             tags: post.tags,
-            profile: null,
+            profile: post.profile,
           },
         },
         content: post.content,

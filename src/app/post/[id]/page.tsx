@@ -2,7 +2,7 @@
 
 import React, { useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { db } from "@/lib/db";
+import { usePostThread } from "@/lib/useFeed";
 import { Header } from "@/components/Header";
 import { Composer } from "@/components/Composer";
 import { PostCard, PostItem } from "@/components/PostCard";
@@ -35,58 +35,15 @@ export default function PostDetailPage({
     profileName?: string | null;
   } | null>(null);
 
-  // InstantDB query for this post, its parent chain, and all replies
-  const { data, isLoading } = db.useQuery({
-    posts: {
-      $: { where: { id } },
-      profile: {},
-      parent: {
-        profile: {},
-        parent: {
-          profile: {},
-        },
-      },
-      replies: {
-        $: { order: { createdAt: "asc" } },
-        profile: {},
-        replies: {},
-      },
-    },
-  });
+  const {
+    post: focalPost,
+    parent: parentPost,
+    grandParent: grandParentPost,
+    isLoading,
+    refresh,
+  } = usePostThread(id);
 
-  const focalPostRaw = data?.posts?.[0];
-
-  const formatPostItem = (p: any): PostItem => {
-    return {
-      id: p.id,
-      content: p.content,
-      authorPubkey: p.authorPubkey || null,
-      signed: Boolean(p.signed),
-      signature: p.signature || null,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt || null,
-      replyToId: p.replyToId || null,
-      rootId: p.rootId || p.id,
-      tags: p.tags ? (typeof p.tags === "string" ? JSON.parse(p.tags) : p.tags) : [],
-      profile: p.profile
-        ? {
-            name: p.profile.name,
-            bio: p.profile.bio,
-            avatar: p.profile.avatar,
-          }
-        : null,
-      replies: p.replies || [],
-      parent: p.parent,
-    };
-  };
-
-  const focalPost = focalPostRaw ? formatPostItem(focalPostRaw) : null;
-  const parentPost = focalPostRaw?.parent ? formatPostItem(focalPostRaw.parent) : null;
-  const grandParentPost = focalPostRaw?.parent?.parent
-    ? formatPostItem(focalPostRaw.parent.parent)
-    : null;
-
-  const replies = (focalPostRaw?.replies || []).map(formatPostItem);
+  const replies = focalPost?.replies ?? [];
 
   // Active reply target: if user clicked reply on a specific reply, use that; otherwise focal post
   const effectiveReplyTarget =
@@ -197,6 +154,7 @@ export default function PostDetailPage({
                 onCancelReply={() => setReplyTarget(null)}
                 onPostSuccess={() => {
                   setReplyTarget(null);
+                  void refresh();
                 }}
                 autoFocus={false}
               />
@@ -277,6 +235,7 @@ export default function PostDetailPage({
         post={editingPost}
         isOpen={Boolean(editingPost)}
         onClose={() => setEditingPost(null)}
+        onEditedSuccess={() => void refresh()}
       />
 
       <ProfileModal

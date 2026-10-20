@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { upsertProfileServer } from "@/lib/adminDb";
+import { upsertProfileServer } from "@/lib/repo";
 import { emitEvent } from "@/lib/webhooks";
 import { getClientIp, rateLimit } from "@/lib/rateLimit";
 import { getOrigin } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   const limit = rateLimit(`profiles:update:${getClientIp(req)}`, 10, 60_000);

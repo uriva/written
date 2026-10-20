@@ -1,30 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/adminDb";
+import { getProfile } from "@/lib/repo";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ pubkey: string }> }
 ) {
   try {
     const { pubkey } = await params;
     const cleanPubkey = pubkey.toLowerCase().trim();
-
-    const { profiles, posts } = await adminDb.query({
-      profiles: {
-        $: { where: { pubkey: cleanPubkey } },
-      },
-      posts: {
-        $: {
-          where: { authorPubkey: cleanPubkey },
-          order: { createdAt: "desc" },
-          limit: 50,
-        },
-      },
-    });
-
-    const profile = profiles?.[0];
+    const { profile, postCount, recentPosts } = await getProfile(cleanPubkey);
 
     return NextResponse.json({
       success: true,
@@ -32,19 +19,19 @@ export async function GET(
       profile: profile
         ? {
             name: profile.name,
-            bio: profile.bio || null,
-            avatar: profile.avatar || null,
+            bio: profile.bio,
+            avatar: profile.avatar,
             updatedAt: profile.updatedAt,
           }
         : null,
-      postCount: posts?.length || 0,
-      recentPosts: (posts || []).map((p: any) => ({
-        id: p.id,
-        content: p.content,
-        createdAt: p.createdAt,
-        updatedAt: p.updatedAt || null,
-        signed: Boolean(p.signed),
-        tags: p.tags ? JSON.parse(p.tags) : [],
+      postCount,
+      recentPosts: recentPosts.map((post) => ({
+        id: post.id,
+        content: post.content,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        signed: post.signed,
+        tags: post.tags,
       })),
     });
   } catch (error: any) {

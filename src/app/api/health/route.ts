@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { APP_ID, adminDb } from "@/lib/adminDb";
+import { pingDatabase } from "@/lib/repo";
 import { getOrigin } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   let databaseError: string | null = null;
 
   try {
-    await adminDb.query({ tags: { $: { limit: 1 } } });
+    await pingDatabase();
   } catch (error: any) {
     database = "error";
     databaseError = error?.message || "query failed";
@@ -22,8 +22,8 @@ export async function GET(req: Request) {
     {
       ok: database === "ok",
       service: "written",
-      version: "1.0.0",
-      appId: APP_ID,
+      version: "1.2.0",
+      storage: "postgres",
       site: getOrigin(req),
       database,
       databaseError,

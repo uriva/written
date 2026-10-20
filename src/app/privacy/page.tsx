@@ -57,8 +57,8 @@ export default function PrivacyPage() {
           <p>
             When you visit Written, an Ed25519 cryptographic keypair is
             generated locally in your browser and stored in your device&apos;s
-            localStorage. Your private key never leaves your device unless you
-            explicitly choose the optional Cloud Backup feature in Settings.
+            localStorage. Your private key never leaves your device; export a
+            backup from Settings and store it somewhere safe.
           </p>
         </section>
 
@@ -77,19 +77,7 @@ export default function PrivacyPage() {
 
         <section className="space-y-3 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
           <h2 className="text-base font-semibold text-black dark:text-white">
-            4. Optional Email Key Backup
-          </h2>
-          <p>
-            If you choose to sync your private key across devices via the
-            Settings menu, your email address is used solely to authenticate your
-            key record in InstantDB. We do not sell, rent, or share your email
-            address with third parties.
-          </p>
-        </section>
-
-        <section className="space-y-3 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
-          <h2 className="text-base font-semibold text-black dark:text-white">
-            5. Cookies and Analytics
+            4. Cookies and Analytics
           </h2>
           <p>
             Written uses browser local storage strictly for essential operational

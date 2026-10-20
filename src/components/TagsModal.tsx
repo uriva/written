@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Hash, Search } from "lucide-react";
-import { db } from "@/lib/db";
+import { useTags } from "@/lib/useFeed";
 
 interface TagsModalProps {
   isOpen: boolean;
@@ -25,18 +25,9 @@ export function TagsModal({
 }: TagsModalProps) {
   const [filter, setFilter] = useState("");
 
-  const { data, isLoading } = db.useQuery({
-    tags: {
-      $: {
-        order: { postCount: "desc" },
-        limit: 100,
-      },
-    },
-  });
-
-  const allTags = data?.tags || [];
-  const filteredTags = allTags.filter((t: any) =>
-    t.name.toLowerCase().includes(filter.toLowerCase().trim())
+  const { tags: allTags, isLoading } = useTags();
+  const filteredTags = allTags.filter((tag) =>
+    tag.name.toLowerCase().includes(filter.toLowerCase().trim())
   );
 
   return (

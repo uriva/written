@@ -31,6 +31,7 @@ export interface PostItem {
     avatar?: string | null;
   } | null;
   replies?: any[];
+  repliesCount?: number;
   parent?: any;
 }
 
@@ -61,7 +62,7 @@ export function PostCard({
     keypair?.publicKey &&
     post.authorPubkey?.toLowerCase() === keypair.publicKey.toLowerCase();
 
-  const repliesCount = post.replies?.length || 0;
+  const repliesCount = post.repliesCount ?? post.replies?.length ?? 0;
   const isEdited = Boolean(post.updatedAt && post.updatedAt > post.createdAt);
 
   const displayName = isSigned

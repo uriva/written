@@ -1,27 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { adminDb, parseTags } from "@/lib/adminDb";
+import { getProfile } from "@/lib/repo";
 import { formatShortKey, isValidPubkey } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
 
 async function loadProfile(pubkey: string) {
-  const [profileResult, postResult] = await Promise.all([
-    adminDb.query({
-      profiles: { $: { where: { pubkey }, limit: 1 } },
-    }),
-    adminDb.query({
-      posts: {
-        $: { where: { authorPubkey: pubkey }, order: { createdAt: "desc" }, limit: 50 },
-      },
-    }),
-  ]);
-
-  return {
-    profile: profileResult.profiles?.[0] || null,
-    posts: postResult.posts || [],
-  };
+  return getProfile(pubkey);
 }
 
 export async function generateMetadata({
@@ -54,7 +40,7 @@ export default async function ProfilePage({
   const clean = pubkey.toLowerCase();
   if (!isValidPubkey(clean)) notFound();
 
-  const { profile, posts } = await loadProfile(clean);
+  const { profile, postCount, recentPosts } = await loadProfile(clean);
   const name = profile?.name || formatShortKey(clean);
 
   return (
@@ -65,7 +51,7 @@ export default async function ProfilePage({
             ← written
           </Link>
           <span className="font-mono text-[11px] text-neutral-400">
-            {posts.length} post{posts.length === 1 ? "" : "s"}
+            {postCount} post{postCount === 1 ? "" : "s"}
           </span>
         </div>
       </header>
@@ -101,13 +87,13 @@ export default async function ProfilePage({
           </div>
         </section>
 
-        {posts.length === 0 ? (
+        {recentPosts.length === 0 ? (
           <p className="text-sm text-neutral-500 py-10 text-center">
             No posts from this key yet.
           </p>
         ) : (
           <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
-            {posts.map((post: any) => (
+            {recentPosts.map((post) => (
               <li key={post.id} className="py-4">
                 <Link href={`/post/${post.id}`} className="block group">
                   <p className="text-[15px] leading-relaxed whitespace-pre-wrap group-hover:underline">
@@ -118,7 +104,7 @@ export default async function ProfilePage({
                       {new Date(post.createdAt).toLocaleString()}
                     </time>
                     {post.updatedAt && <span>edited</span>}
-                    {parseTags(post.tags).map((tag: string) => (
+                    {post.tags.map((tag) => (
                       <span key={tag}>#{tag}</span>
                     ))}
                   </div>

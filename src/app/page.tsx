@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { db } from "@/lib/db";
+import { useFeed } from "@/lib/useFeed";
 import { Header } from "@/components/Header";
 import { Composer } from "@/components/Composer";
 import { PostCard, PostItem } from "@/components/PostCard";
@@ -33,63 +33,26 @@ export default function HomePage() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [feedMode, setFeedMode] = useState<"all" | "signed" | "unsigned">("all");
 
-  // InstantDB Real-time Query
-  const { data, isLoading } = db.useQuery({
-    posts: {
-      $: {
-        order: { createdAt: "desc" },
-        limit: 100,
-      },
-      profile: {},
-      replies: {},
-    },
-  });
+  // Read ?tag= from the URL (used by profile/tag links).
+  useEffect(() => {
+    const tag = new URLSearchParams(window.location.search).get("tag");
+    if (tag) setActiveTag(tag.toLowerCase().replace(/^#/, ""));
+  }, []);
 
-  const rawPosts = data?.posts || [];
+  // Polling feed backed by PostgreSQL.
+  const { posts: rawPosts, isLoading, error, refresh } = useFeed(activeTag);
 
-  // Filter posts
   const filteredPosts = useMemo(() => {
-    let list = rawPosts.map((p: any) => ({
-      id: p.id,
-      content: p.content,
-      authorPubkey: p.authorPubkey || null,
-      signed: Boolean(p.signed),
-      signature: p.signature || null,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt || null,
-      replyToId: p.replyToId || null,
-      rootId: p.rootId || p.id,
-      tags: p.tags ? (typeof p.tags === "string" ? JSON.parse(p.tags) : p.tags) : [],
-      profile: p.profile
-        ? {
-            name: p.profile.name,
-            bio: p.profile.bio,
-            avatar: p.profile.avatar,
-          }
-        : null,
-      replies: p.replies || [],
-    }));
+    let list = rawPosts.filter((post) => !post.replyToId);
 
-    // Filter out replies from top-level feed (unless viewing thread)
-    list = list.filter((p) => !p.replyToId);
-
-    // Filter by active hashtag
-    if (activeTag) {
-      list = list.filter((p) => {
-        if (!p.tags || !Array.isArray(p.tags)) return false;
-        return p.tags.map((t: string) => t.toLowerCase()).includes(activeTag.toLowerCase());
-      });
-    }
-
-    // Filter by signed vs unsigned
     if (feedMode === "signed") {
-      list = list.filter((p) => p.signed);
+      list = list.filter((post) => post.signed);
     } else if (feedMode === "unsigned") {
-      list = list.filter((p) => !p.signed);
+      list = list.filter((post) => !post.signed);
     }
 
     return list;
-  }, [rawPosts, activeTag, feedMode]);
+  }, [rawPosts, feedMode]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-black text-black dark:text-white font-sans flex flex-col selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black">
@@ -109,6 +72,7 @@ export default function HomePage() {
           onCancelReply={() => setReplyingTo(null)}
           onPostSuccess={() => {
             setReplyingTo(null);
+            void refresh();
           }}
         />
 
@@ -123,7 +87,7 @@ export default function HomePage() {
                   : "text-neutral-500 hover:text-black dark:hover:text-white"
               }`}
             >
-              All ({rawPosts.filter((p: any) => !p.replyToId).length})
+              All ({rawPosts.filter((p) => !p.replyToId).length})
             </button>
             <button
               onClick={() => setFeedMode("signed")}
@@ -167,7 +131,18 @@ export default function HomePage() {
         {/* Feed Posts */}
         {isLoading ? (
           <div className="py-16 text-center font-mono text-xs text-neutral-400">
-            Connecting to instantdb.uriv.me...
+            Loading the feed...
+          </div>
+        ) : error && rawPosts.length === 0 ? (
+          <div className="py-16 text-center border border-dashed border-neutral-200 dark:border-neutral-800 p-8 space-y-2">
+            <div className="font-mono font-bold text-sm">Could not load the feed</div>
+            <p className="font-mono text-xs text-neutral-400">{error}</p>
+            <button
+              onClick={() => void refresh()}
+              className="font-mono text-xs underline underline-offset-2"
+            >
+              Retry
+            </button>
           </div>
         ) : filteredPosts.length === 0 ? (
           <div className="py-16 text-center border border-dashed border-neutral-200 dark:border-neutral-800 p-8 space-y-2">
@@ -254,6 +229,7 @@ export default function HomePage() {
         post={editingPost}
         isOpen={Boolean(editingPost)}
         onClose={() => setEditingPost(null)}
+        onEditedSuccess={() => void refresh()}
       />
 
       <ProfileModal

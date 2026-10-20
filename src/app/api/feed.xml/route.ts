@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { adminDb } from "@/lib/adminDb";
+import { listPosts } from "@/lib/repo";
 import { getOrigin } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -32,33 +32,12 @@ export async function GET(req: NextRequest) {
   const origin = getOrigin(req);
 
   try {
-    const where: Record<string, any> = {};
-    if (author) where.authorPubkey = author;
-
-    const { posts } = await adminDb.query({
-      posts: {
-        $: {
-          where: (Object.keys(where).length ? where : undefined) as any,
-          order: { createdAt: "desc" },
-          limit: tag ? 300 : limit,
-        },
-        profile: {},
-      },
+    const rows = await listPosts({
+      tag,
+      author,
+      order: "desc",
+      limit,
     });
-
-    let rows: any[] = posts || [];
-    if (tag) {
-      rows = rows
-        .filter((post) => {
-          try {
-            const parsed = JSON.parse(post.tags || "[]");
-            return Array.isArray(parsed) && parsed.includes(tag);
-          } catch {
-            return false;
-          }
-        })
-        .slice(0, limit);
-    }
 
     const feedTitle = tag
       ? `Written — #${tag}`
@@ -80,7 +59,7 @@ export async function GET(req: NextRequest) {
     <title>${escapeXml(titleFor(post.content))}</title>
     <updated>${new Date(post.updatedAt || post.createdAt).toISOString()}</updated>
     <author><name>${escapeXml(authorName)}</name></author>
-    ${(post.tags ? JSON.parse(post.tags) : []).map((t: string) => `<category term="${escapeXml(t)}"/>`).join("\n    ")}
+    ${post.tags.map((tag) => `<category term="${escapeXml(tag)}"/>`).join("\n    ")}
     <content type="text">${escapeXml(post.content)}</content>
   </entry>`;
       })

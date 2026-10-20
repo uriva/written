@@ -68,7 +68,7 @@ export function ApiExplorerModal({ isOpen, onClose }: ApiExplorerModalProps) {
     setPlayValid(valid);
   };
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://written.deno.dev";
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://written.example.com";
 
   const snippets = {
     postUnsigned: `curl -X POST ${origin}/api/posts \\

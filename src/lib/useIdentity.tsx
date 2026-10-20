@@ -13,7 +13,6 @@ import {
   isValidPrivateKey,
   KeyPair,
 } from "./crypto";
-import { db, id } from "./db";
 import { toast } from "sonner";
 
 interface IdentityContextType {
@@ -28,16 +27,6 @@ interface IdentityContextType {
   importPrivateKey: (hex: string) => boolean;
   clearKey: () => void;
   updateLocalProfile: (name: string, bio: string, avatar: string) => void;
-  // InstantDB account auth for email backup in settings
-  authUser: any;
-  authLoading: boolean;
-  sendEmailCode: (email: string) => Promise<void>;
-  verifyEmailCode: (email: string, code: string) => Promise<void>;
-  signOutEmail: () => Promise<void>;
-  saveKeyToAccount: () => Promise<void>;
-  hasCloudKey: boolean;
-  cloudKeyPubkey: string | null;
-  restoreKeyFromAccount: () => Promise<void>;
 }
 
 const STORAGE_KEY_PAIR = "written_keypair_v1";
@@ -53,26 +42,6 @@ export function IdentityProvider({ children }: { children: React.ReactNode }) {
   const [profileBio, setProfileBio] = useState<string>("");
   const [profileAvatar, setProfileAvatar] = useState<string>("");
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
-
-  // InstantDB auth for optional email backup in Settings
-  const { user: authUser, isLoading: authLoading } = db.useAuth();
-
-  // Query userKeys if authUser is present
-  const userKeysQuery = db.useQuery(
-    authUser
-      ? {
-          userKeys: {
-            $: {
-              where: { "user.id": authUser.id },
-            },
-          },
-        }
-      : {}
-  );
-
-  const cloudUserKey = userKeysQuery.data?.userKeys?.[0];
-  const hasCloudKey = Boolean(cloudUserKey);
-  const cloudKeyPubkey = cloudUserKey?.pubkey || null;
 
   // Initialize from localStorage or generate automatically on first load
   useEffect(() => {
@@ -185,69 +154,6 @@ export function IdentityProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  // Email auth methods
-  const sendEmailCode = useCallback(async (email: string) => {
-    if (!email || !email.includes("@")) {
-      throw new Error("Valid email is required");
-    }
-    await db.auth.sendMagicCode({ email: email.trim().toLowerCase() });
-    toast.success("Verification code sent to your email");
-  }, []);
-
-  const verifyEmailCode = useCallback(async (email: string, code: string) => {
-    if (!email || !code) {
-      throw new Error("Email and code are required");
-    }
-    await db.auth.signInWithMagicCode({
-      email: email.trim().toLowerCase(),
-      code: code.trim(),
-    });
-    toast.success("Signed in with email");
-  }, []);
-
-  const signOutEmail = useCallback(async () => {
-    await db.auth.signOut();
-    toast.info("Signed out from email backup account");
-  }, []);
-
-  const saveKeyToAccount = useCallback(async () => {
-    if (!authUser) {
-      throw new Error("Please sign in with email first");
-    }
-    if (!keypair) {
-      throw new Error("No local keypair to backup");
-    }
-
-    const keyId = cloudUserKey?.id || id();
-    const now = Date.now();
-
-    await db.transact([
-      db.tx.userKeys[keyId]
-        .update({
-          pubkey: keypair.publicKey,
-          privateKey: keypair.privateKey,
-          updatedAt: now,
-          createdAt: cloudUserKey?.createdAt || now,
-        })
-        .link({ user: authUser.id }),
-    ]);
-
-    toast.success("Private key backed up to your account");
-  }, [authUser, keypair, cloudUserKey]);
-
-  const restoreKeyFromAccount = useCallback(async () => {
-    if (!cloudUserKey?.privateKey || !cloudUserKey?.pubkey) {
-      throw new Error("No backed up key found on this account");
-    }
-    const kp: KeyPair = {
-      privateKey: cloudUserKey.privateKey,
-      publicKey: cloudUserKey.pubkey,
-    };
-    localStorage.setItem(STORAGE_KEY_PAIR, JSON.stringify(kp));
-    setKeypair(kp);
-    toast.success("Restored private key from your account");
-  }, [cloudUserKey]);
-
   return (
     <IdentityContext.Provider
       value={{
@@ -262,15 +168,6 @@ export function IdentityProvider({ children }: { children: React.ReactNode }) {
         importPrivateKey,
         clearKey,
         updateLocalProfile,
-        authUser,
-        authLoading,
-        sendEmailCode,
-        verifyEmailCode,
-        signOutEmail,
-        saveKeyToAccount,
-        hasCloudKey,
-        cloudKeyPubkey,
-        restoreKeyFromAccount,
       }}
     >
       {children}

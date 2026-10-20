@@ -1,33 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb, editPostServer } from "@/lib/adminDb";
+import { editPostServer, getPostThread } from "@/lib/repo";
 import { emitEvent } from "@/lib/webhooks";
 import { getClientIp, rateLimit } from "@/lib/rateLimit";
 import { getOrigin } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const { posts } = await adminDb.query({
-      posts: {
-        $: { where: { id } },
-        profile: {},
-        replies: {
-          $: { order: { createdAt: "asc" } },
-          profile: {},
-        },
-        parent: {
-          profile: {},
-        },
-      },
-    });
+    const thread = await getPostThread(id);
 
-    const post = posts?.[0];
-    if (!post) {
+    if (!thread) {
       return NextResponse.json(
         { success: false, error: "Post not found" },
         { status: 404 }
@@ -37,56 +25,12 @@ export async function GET(
     return NextResponse.json({
       success: true,
       post: {
-        id: post.id,
-        content: post.content,
-        authorPubkey: post.authorPubkey || null,
-        signed: Boolean(post.signed),
-        signature: post.signature || null,
-        createdAt: post.createdAt,
-        updatedAt: post.updatedAt || null,
-        replyToId: post.replyToId || null,
-        rootId: post.rootId || post.id,
-        tags: post.tags ? JSON.parse(post.tags) : [],
-        editHistory: post.editHistory ? JSON.parse(post.editHistory) : [],
-        profile: post.profile
-          ? {
-              name: post.profile.name,
-              bio: post.profile.bio || null,
-              avatar: post.profile.avatar || null,
-            }
-          : null,
-        parent: post.parent
-          ? {
-              id: post.parent.id,
-              content: post.parent.content,
-              authorPubkey: post.parent.authorPubkey || null,
-              signed: Boolean(post.parent.signed),
-              createdAt: post.parent.createdAt,
-              profile: post.parent.profile
-                ? {
-                    name: post.parent.profile.name,
-                    avatar: post.parent.profile.avatar || null,
-                  }
-                : null,
-            }
-          : null,
-        replies: (post.replies || []).map((r: any) => ({
-          id: r.id,
-          content: r.content,
-          authorPubkey: r.authorPubkey || null,
-          signed: Boolean(r.signed),
-          signature: r.signature || null,
-          createdAt: r.createdAt,
-          updatedAt: r.updatedAt || null,
-          tags: r.tags ? JSON.parse(r.tags) : [],
-          profile: r.profile
-            ? {
-                name: r.profile.name,
-                avatar: r.profile.avatar || null,
-              }
-            : null,
-        })),
+        ...thread.post,
+        parent: thread.parent,
       },
+      parent: thread.parent,
+      grandParent: thread.grandParent,
+      replies: thread.post.replies ?? [],
     });
   } catch (error: any) {
     return NextResponse.json(
@@ -164,7 +108,7 @@ export async function PATCH(
             replyToId: updated.replyToId,
             rootId: updated.rootId,
             tags: updated.tags,
-            profile: null,
+            profile: updated.profile,
           },
         },
         content: updated.content,
