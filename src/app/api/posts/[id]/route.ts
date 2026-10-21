@@ -8,12 +8,17 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const thread = await getPostThread(id);
+    const { searchParams } = new URL(req.url);
+    const viewer =
+      searchParams.get("viewer")?.toLowerCase() ||
+      req.headers.get("x-written-pubkey")?.toLowerCase() ||
+      null;
+    const thread = await getPostThread(id, viewer);
 
     if (!thread) {
       return NextResponse.json(

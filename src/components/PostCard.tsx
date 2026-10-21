@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { formatTimeAgo } from "@/lib/utils";
 import { useIdentity } from "@/lib/useIdentity";
+import { buildVoteCanonicalMessage, signPayload } from "@/lib/crypto";
 import { pubkeyToFriendlyName, getAuthorInitials } from "@/lib/nameGenerator";
 import { MENTION_REGEX_SOURCE, formatMention } from "@/lib/mentions";
 import {
@@ -12,7 +13,10 @@ import {
   CornerDownRight,
   ChevronRight,
   CheckCircle2,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
+import { toast } from "sonner";
 
 export interface PostItem {
   id: string;
@@ -35,6 +39,10 @@ export interface PostItem {
   replies?: any[];
   repliesCount?: number;
   parent?: any;
+  upvotesCount?: number;
+  downvotesCount?: number;
+  viewerVote?: 1 | -1 | 0;
+  likenessScore?: number;
 }
 
 interface PostCardProps {
@@ -44,6 +52,7 @@ interface PostCardProps {
   onSelectTag?: (tag: string) => void;
   onViewAuthorProfile?: (pubkey: string) => void;
   onViewThread?: (post: PostItem) => void;
+  onVoteChange?: () => void;
   isThreadView?: boolean;
 }
 
@@ -54,9 +63,68 @@ export function PostCard({
   onSelectTag,
   onViewAuthorProfile,
   onViewThread,
+  onVoteChange,
   isThreadView = false,
 }: PostCardProps) {
   const { keypair } = useIdentity();
+  const [localVote, setLocalVote] = useState<1 | -1 | 0 | null>(null);
+  const [upDelta, setUpDelta] = useState(0);
+  const [downDelta, setDownDelta] = useState(0);
+  const [isVoting, setIsVoting] = useState(false);
+
+  const effectiveVote: 1 | -1 | 0 = localVote ?? post.viewerVote ?? 0;
+  const upvotesCount = Math.max(0, (post.upvotesCount ?? 0) + upDelta);
+  const downvotesCount = Math.max(0, (post.downvotesCount ?? 0) + downDelta);
+
+  const handleVote = async (target: 1 | -1) => {
+    if (!keypair) {
+      toast.error("Generate or import a key in Settings to vote");
+      return;
+    }
+    if (isVoting) return;
+
+    const current = effectiveVote;
+    const nextValue: -1 | 0 | 1 = current === target ? 0 : target;
+    const prevUpDelta = upDelta;
+    const prevDownDelta = downDelta;
+
+    setLocalVote(nextValue);
+    setUpDelta(prevUpDelta + (nextValue === 1 ? 1 : 0) - (current === 1 ? 1 : 0));
+    setDownDelta(prevDownDelta + (nextValue === -1 ? 1 : 0) - (current === -1 ? 1 : 0));
+    setIsVoting(true);
+
+    try {
+      const updatedAt = Date.now();
+      const canonical = buildVoteCanonicalMessage({
+        postId: post.id,
+        value: nextValue,
+        updatedAt,
+      });
+      const signature = signPayload(canonical, keypair.privateKey);
+      const res = await fetch(`/api/posts/${encodeURIComponent(post.id)}/vote`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          voterPubkey: keypair.publicKey,
+          value: nextValue,
+          updatedAt,
+          signature,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Vote failed");
+      }
+      onVoteChange?.();
+    } catch (err: any) {
+      setLocalVote(current);
+      setUpDelta(prevUpDelta);
+      setDownDelta(prevDownDelta);
+      toast.error(err?.message || "Failed to submit vote");
+    } finally {
+      setIsVoting(false);
+    }
+  };
 
   const isSigned = Boolean(post.signed && post.authorPubkey);
   const isAuthor =
@@ -272,6 +340,42 @@ export function PostCard({
       {/* Actions Bar */}
       <div className="flex items-center justify-between pt-2.5 border-t border-neutral-100 dark:border-neutral-900 text-xs text-neutral-500">
         <div className="flex items-center gap-5">
+          {/* Upvote: More of this */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleVote(1);
+            }}
+            className={`flex items-center gap-1 transition-colors ${
+              effectiveVote === 1
+                ? "text-black dark:text-white font-semibold"
+                : "hover:text-black dark:hover:text-white"
+            }`}
+            title="Show me more like this (+1)"
+          >
+            <ThumbsUp className="w-3.5 h-3.5" />
+            {upvotesCount > 0 && <span className="text-xs">{upvotesCount}</span>}
+          </button>
+
+          {/* Downvote: Less of this */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleVote(-1);
+            }}
+            className={`flex items-center gap-1 transition-colors ${
+              effectiveVote === -1
+                ? "text-black dark:text-white font-semibold"
+                : "hover:text-black dark:hover:text-white"
+            }`}
+            title="Show me less like this (-1)"
+          >
+            <ThumbsDown className="w-3.5 h-3.5" />
+            {downvotesCount > 0 && <span className="text-xs">{downvotesCount}</span>}
+          </button>
+
           {onReply && (
             <button
               type="button"

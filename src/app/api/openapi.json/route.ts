@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
               { name: "before", in: "query", schema: { type: "integer" }, description: "createdAt cursor (exclusive)" },
               { name: "since", in: "query", schema: { type: "integer" }, description: "createdAt cursor for polling (exclusive)" },
               { name: "order", in: "query", schema: { type: "string", enum: ["asc", "desc"] } },
+              { name: "viewer", in: "query", schema: { type: "string" }, description: "64-char hex viewer pubkey for personalized pairwise likeness ranking" },
+              { name: "rank", in: "query", schema: { type: "string", enum: ["for-you", "latest"], default: "for-you" } },
               { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 50 } },
             ],
             responses: { "200": { description: "A page of posts" } },
@@ -103,6 +105,35 @@ export async function GET(req: NextRequest) {
               },
             },
             responses: { "200": { description: "Updated" }, "403": { description: "Unsigned posts are immutable" } },
+          },
+        },
+        "/api/posts/{id}/vote": {
+          post: {
+            tags: ["posts"],
+            operationId: "votePost",
+            parameters: [
+              { name: "id", in: "path", required: true, schema: { type: "string" } },
+              { $ref: "#/components/parameters/PubkeyHeader" },
+              { $ref: "#/components/parameters/SignatureHeader" },
+            ],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: {
+                      value: { type: "integer", enum: [1, -1, 0], description: "1 = more of this, -1 = less of this, 0 = clear vote" },
+                      voterPubkey: { type: "string", description: "64-char hex Ed25519 public key" },
+                      signature: { type: "string", description: "Signature over WRITTEN_VOTE:{postId}:{value}:{updatedAt}" },
+                      updatedAt: { type: "integer" },
+                    },
+                  },
+                },
+              },
+            },
+            responses: { "200": { description: "Vote recorded" }, "401": { description: "Invalid signature" } },
           },
         },
         "/api/tags": {

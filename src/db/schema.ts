@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
 } from "drizzle-orm/pg-core";
 import type { NormalizedWebhookFilters } from "../lib/webhookTypes";
@@ -111,5 +112,22 @@ export const webhookDeliveries = pgTable(
   (table) => [
     index("webhook_deliveries_webhook_idx").on(table.webhookId),
     index("webhook_deliveries_status_idx").on(table.status, table.nextAttemptAt),
+  ]
+);
+
+export const votes = pgTable(
+  "votes",
+  {
+    postId: text("post_id").notNull(),
+    voterPubkey: text("voter_pubkey").notNull(),
+    value: integer("value").notNull(), // +1 ("more of this") or -1 ("less of this")
+    signature: text("signature").notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.postId, table.voterPubkey] }),
+    index("votes_post_idx").on(table.postId),
+    index("votes_voter_idx").on(table.voterPubkey),
+    index("votes_updated_at_idx").on(table.updatedAt),
   ]
 );

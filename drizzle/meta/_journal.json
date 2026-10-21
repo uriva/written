@@ -15,6 +15,13 @@
       "when": 1792479790018,
       "tag": "0001_flashy_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792568615544,
+      "tag": "0002_robust_ego",
+      "breakpoints": true
     }
   ]
 }

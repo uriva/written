@@ -35,6 +35,13 @@ export async function GET(req: NextRequest) {
       searchParams.get("order") === "asc" || (since && !searchParams.get("order"))
         ? "asc"
         : "desc";
+    const viewer =
+      searchParams.get("viewer")?.toLowerCase() ||
+      req.headers.get("x-written-pubkey")?.toLowerCase() ||
+      null;
+    const rankParam = searchParams.get("rank");
+    const rank: "for-you" | "latest" =
+      rankParam === "latest" ? "latest" : "for-you";
 
     const results = await listPosts({
       tag,
@@ -47,6 +54,8 @@ export async function GET(req: NextRequest) {
       since,
       limit,
       order,
+      viewer,
+      rank,
     });
 
     const last = results[results.length - 1];
@@ -56,6 +65,7 @@ export async function GET(req: NextRequest) {
       count: results.length,
       nextCursor: results.length === limit && last ? last.createdAt : null,
       order,
+      rankedFor: viewer && rank === "for-you" ? viewer : null,
       posts: results.map((post) => ({
         id: post.id,
         content: post.content,
@@ -70,6 +80,10 @@ export async function GET(req: NextRequest) {
         mentions: post.mentions,
         profile: post.profile,
         repliesCount: post.repliesCount ?? 0,
+        upvotesCount: post.upvotesCount ?? 0,
+        downvotesCount: post.downvotesCount ?? 0,
+        viewerVote: post.viewerVote ?? 0,
+        likenessScore: post.likenessScore ?? 0,
       })),
     });
   } catch (error: any) {

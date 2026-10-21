@@ -3,6 +3,7 @@
 import React, { useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { usePostThread } from "@/lib/useFeed";
+import { useIdentity } from "@/lib/useIdentity";
 import { Header } from "@/components/Header";
 import { Composer } from "@/components/Composer";
 import { PostCard, PostItem } from "@/components/PostCard";
@@ -20,6 +21,7 @@ export default function PostDetailPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const { keypair } = useIdentity();
 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -41,7 +43,7 @@ export default function PostDetailPage({
     grandParent: grandParentPost,
     isLoading,
     refresh,
-  } = usePostThread(id);
+  } = usePostThread(id, keypair?.publicKey || null);
 
   const replies = focalPost?.replies ?? [];
 
@@ -144,6 +146,7 @@ export default function PostDetailPage({
                 }
                 onEdit={(p) => setEditingPost(p)}
                 onViewAuthorProfile={(pubkey) => setProfilePubkey(pubkey)}
+                onVoteChange={() => void refresh()}
               />
             </div>
 
@@ -194,6 +197,7 @@ export default function PostDetailPage({
                       onEdit={(p) => setEditingPost(p)}
                       onViewThread={(p) => router.push(`/post/${p.id}`)}
                       onViewAuthorProfile={(pubkey) => setProfilePubkey(pubkey)}
+                      onVoteChange={() => void refresh()}
                     />
                   ))}
                 </div>

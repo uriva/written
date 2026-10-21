@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFeed } from "@/lib/useFeed";
+import { useIdentity } from "@/lib/useIdentity";
 import { Header } from "@/components/Header";
 import { Composer } from "@/components/Composer";
 import { PostCard, PostItem } from "@/components/PostCard";
@@ -15,6 +16,7 @@ import { ShieldCheck, ShieldAlert } from "lucide-react";
 
 export default function HomePage() {
   const router = useRouter();
+  const { keypair } = useIdentity();
 
   // Modal states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -32,6 +34,7 @@ export default function HomePage() {
   // Filter states
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [feedMode, setFeedMode] = useState<"all" | "signed" | "unsigned">("all");
+  const [rankMode, setRankMode] = useState<"for-you" | "latest">("for-you");
 
   // Read ?tag= from the URL (used by profile/tag links).
   useEffect(() => {
@@ -40,7 +43,10 @@ export default function HomePage() {
   }, []);
 
   // Polling feed backed by PostgreSQL.
-  const { posts: rawPosts, isLoading, error, refresh } = useFeed(activeTag);
+  const { posts: rawPosts, isLoading, error, refresh } = useFeed(activeTag, {
+    viewer: keypair?.publicKey || null,
+    rank: rankMode,
+  });
 
   const filteredPosts = useMemo(() => {
     let list = rawPosts.filter((post) => !post.replyToId);
@@ -113,7 +119,7 @@ export default function HomePage() {
             </button>
           </div>
 
-          <div className="text-xs text-neutral-400">
+          <div className="flex items-center gap-3 text-xs text-neutral-400">
             {activeTag ? (
               <span className="flex items-center gap-1">
                 <span>filtering #{activeTag}</span>
@@ -125,6 +131,32 @@ export default function HomePage() {
                 </button>
               </span>
             ) : null}
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setRankMode("for-you")}
+                className={`px-2 py-0.5 transition-colors ${
+                  rankMode === "for-you"
+                    ? "text-black dark:text-white font-semibold underline underline-offset-4"
+                    : "text-neutral-400 hover:text-black dark:hover:text-white"
+                }`}
+                title="Ranked by multi-hop pairwise likeness from your votes"
+              >
+                For you
+              </button>
+              <span>·</span>
+              <button
+                onClick={() => setRankMode("latest")}
+                className={`px-2 py-0.5 transition-colors ${
+                  rankMode === "latest"
+                    ? "text-black dark:text-white font-semibold underline underline-offset-4"
+                    : "text-neutral-400 hover:text-black dark:hover:text-white"
+                }`}
+                title="Chronological order"
+              >
+                Latest
+              </button>
+            </div>
           </div>
         </div>
 
@@ -172,6 +204,7 @@ export default function HomePage() {
                 onSelectTag={(tag) => setActiveTag(tag)}
                 onViewAuthorProfile={(pubkey) => setProfilePubkey(pubkey)}
                 onViewThread={(p) => router.push(`/post/${p.id}`)}
+                onVoteChange={() => void refresh()}
               />
             ))}
           </div>

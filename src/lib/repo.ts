@@ -20,17 +20,24 @@ import {
   posts,
   profiles,
   tags,
+  votes,
   type EditHistoryEntry,
 } from "@/db/schema";
 import {
   buildEditCanonicalMessage,
   buildPostCanonicalMessage,
   buildProfileCanonicalMessage,
+  buildVoteCanonicalMessage,
   extractHashtags,
   isValidPubkey,
   verifyPayload,
 } from "./crypto";
 import { extractMentions } from "./mentions";
+import {
+  scorePostsByRandomWalk,
+  rankPostsByLikeness,
+  type VoteEdge,
+} from "./likeness";
 
 export interface PostDTO {
   id: string;
@@ -53,6 +60,10 @@ export interface PostDTO {
   replies?: PostDTO[];
   repliesCount?: number;
   parent?: PostDTO | null;
+  upvotesCount?: number;
+  downvotesCount?: number;
+  viewerVote?: 1 | -1 | 0;
+  likenessScore?: number;
 }
 
 export interface ProfileDTO {
@@ -101,6 +112,16 @@ export interface ListPostsParams {
   since?: number;
   limit?: number;
   order?: "asc" | "desc";
+  viewer?: string | null;
+  rank?: "for-you" | "latest";
+}
+
+export interface VoteInput {
+  postId: string;
+  voterPubkey: string;
+  value: -1 | 0 | 1;
+  signature: string;
+  updatedAt?: number;
 }
 
 type PostRow = typeof posts.$inferSelect;
@@ -193,6 +214,113 @@ async function replyCountsFor(postIds: string[]): Promise<Map<string, number>> {
   );
 }
 
+interface VoteSummary {
+  upvotes: number;
+  downvotes: number;
+  viewerVote: 1 | -1 | 0;
+}
+
+async function voteSummariesFor(
+  postIds: string[],
+  viewerPubkey?: string | null
+): Promise<Map<string, VoteSummary>> {
+  const result = new Map<string, VoteSummary>();
+  if (!postIds.length) return result;
+
+  const cleanViewer =
+    viewerPubkey && isValidPubkey(viewerPubkey) ? viewerPubkey.trim().toLowerCase() : null;
+
+  try {
+    const rows = await getDb()
+      .select({
+        postId: votes.postId,
+        voterPubkey: votes.voterPubkey,
+        value: votes.value,
+      })
+      .from(votes)
+      .where(inArray(votes.postId, postIds));
+
+    for (const row of rows) {
+      let summary = result.get(row.postId);
+      if (!summary) {
+        summary = { upvotes: 0, downvotes: 0, viewerVote: 0 };
+        result.set(row.postId, summary);
+      }
+      if (row.value > 0) summary.upvotes += 1;
+      else if (row.value < 0) summary.downvotes += 1;
+      if (cleanViewer && row.voterPubkey.toLowerCase() === cleanViewer) {
+        summary.viewerVote = row.value > 0 ? 1 : row.value < 0 ? -1 : 0;
+      }
+    }
+  } catch {
+    // Gracefully degrade if votes table is not yet migrated
+  }
+
+  return result;
+}
+
+async function personalizedScoresFor(
+  viewerPubkey: string,
+  candidateRows: PostRow[]
+): Promise<Map<string, number>> {
+  try {
+    const db = getDb();
+    const [voteRows, recentPostRows] = await Promise.all([
+      db
+        .select({
+          postId: votes.postId,
+          voterPubkey: votes.voterPubkey,
+          value: votes.value,
+        })
+        .from(votes)
+        .orderBy(desc(votes.updatedAt))
+        .limit(10_000),
+      db
+        .select({
+          id: posts.id,
+          authorPubkey: posts.authorPubkey,
+          createdAt: posts.createdAt,
+        })
+        .from(posts)
+        .where(eq(posts.signed, true))
+        .orderBy(desc(posts.createdAt))
+        .limit(1_000),
+    ]);
+
+    const edges: VoteEdge[] = voteRows
+      .filter((r) => r.value === 1 || r.value === -1)
+      .map((r) => ({
+        postId: r.postId,
+        voterPubkey: r.voterPubkey,
+        value: (r.value > 0 ? 1 : -1) as 1 | -1,
+      }));
+
+    const postMap = new Map<string, { id: string; authorPubkey: string | null; createdAt: number }>();
+    for (const p of recentPostRows) {
+      postMap.set(p.id, {
+        id: p.id,
+        authorPubkey: p.authorPubkey,
+        createdAt: Number(p.createdAt),
+      });
+    }
+    for (const p of candidateRows) {
+      postMap.set(p.id, {
+        id: p.id,
+        authorPubkey: p.authorPubkey,
+        createdAt: Number(p.createdAt),
+      });
+    }
+
+    return scorePostsByRandomWalk(
+      viewerPubkey,
+      edges,
+      postMap.values()
+    );
+  } catch {
+    return new Map();
+  }
+}
+
 export async function listPosts(params: ListPostsParams = {}): Promise<PostDTO[]> {
   const db = getDb();
   const conditions: SQL[] = [];
@@ -229,6 +357,11 @@ export async function listPosts(params: ListPostsParams = {}): Promise<PostDTO[]
     conditions.push(ilike(posts.content, `%${params.q}%`));
   }
 
+  const cleanViewer =
+    params.viewer && isValidPubkey(params.viewer)
+      ? params.viewer.trim().toLowerCase()
+      : null;
+
   const order = params.order ?? (params.since ? "asc" : "desc");
   const rows = await db
     .select()
@@ -237,14 +370,31 @@ export async function listPosts(params: ListPostsParams = {}): Promise<PostDTO[]
     .orderBy(order === "asc" ? asc(posts.createdAt) : desc(posts.createdAt))
     .limit(limit);
 
-  const [profileMap, replyMap] = await Promise.all([
+  const postIds = rows.map((row) => row.id);
+  const [profileMap, replyMap, voteMap, likenessScores] = await Promise.all([
     profilesByPubkeys(rows.map((row) => row.authorPubkey)),
-    replyCountsFor(rows.map((row) => row.id)),
+    replyCountsFor(postIds),
+    voteSummariesFor(postIds, cleanViewer),
+    cleanViewer ? personalizedScoresFor(cleanViewer, rows) : Promise.resolve(new Map<string, number>()),
   ]);
 
-  return rows.map((row) =>
-    toPostDTO(row, profileMap.get(row.authorPubkey ?? ""), replyMap.get(row.id) ?? 0)
-  );
+  const dtos = rows.map((row) => {
+    const v = voteMap.get(row.id);
+    const rawScore = likenessScores.get(row.id) ?? 0;
+    return {
+      ...toPostDTO(row, profileMap.get(row.authorPubkey ?? ""), replyMap.get(row.id) ?? 0),
+      upvotesCount: v?.upvotes ?? 0,
+      downvotesCount: v?.downvotes ?? 0,
+      viewerVote: v?.viewerVote ?? 0,
+      likenessScore: Math.round(rawScore * 1000) / 1000,
+    };
+  });
+
+  if (cleanViewer && params.rank !== "latest" && !params.since) {
+    return rankPostsByLikeness(dtos, likenessScores);
+  }
+
+  return dtos;
 }
 
 export interface ThreadResult {
@@ -253,10 +403,18 @@ export interface ThreadResult {
   grandParent: PostDTO | null;
 }
 
-export async function getPostThread(postId: string): Promise<ThreadResult | null> {
+export async function getPostThread(
+  postId: string,
+  viewerPubkey?: string | null
+): Promise<ThreadResult | null> {
   const db = getDb();
   const [focal] = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
   if (!focal) return null;
+
+  const cleanViewer =
+    viewerPubkey && isValidPubkey(viewerPubkey)
+      ? viewerPubkey.trim().toLowerCase()
+      : null;
 
   const rootId = focal.rootId || focal.id;
   const rows = await db
@@ -265,12 +423,23 @@ export async function getPostThread(postId: string): Promise<ThreadResult | null
     .where(or(eq(posts.id, rootId), eq(posts.rootId, rootId)))
     .orderBy(asc(posts.createdAt));
 
-  const profileMap = await profilesByPubkeys(rows.map((row) => row.authorPubkey));
+  const postIds = rows.map((row) => row.id);
+  const [profileMap, voteMap, likenessScores] = await Promise.all([
+    profilesByPubkeys(rows.map((row) => row.authorPubkey)),
+    voteSummariesFor(postIds, cleanViewer),
+    cleanViewer ? personalizedScoresFor(cleanViewer, rows) : Promise.resolve(new Map<string, number>()),
+  ]);
   const byId = new Map<string, PostDTO>();
 
   for (const row of rows) {
+    const v = voteMap.get(row.id);
+    const rawScore = likenessScores.get(row.id) ?? 0;
     byId.set(row.id, {
       ...toPostDTO(row, profileMap.get(row.authorPubkey ?? "")),
+      upvotesCount: v?.upvotes ?? 0,
+      downvotesCount: v?.downvotes ?? 0,
+      viewerVote: v?.viewerVote ?? 0,
+      likenessScore: Math.round(rawScore * 1000) / 1000,
       replies: [],
     });
   }
@@ -284,6 +453,9 @@ export async function getPostThread(postId: string): Promise<ThreadResult | null
 
   for (const post of byId.values()) {
     post.repliesCount = post.replies?.length ?? 0;
+    if (cleanViewer && post.replies && post.replies.length > 1) {
+      post.replies = rankPostsByLikeness(post.replies, likenessScores);
+    }
   }
 
   const focalDTO = byId.get(focal.id);
@@ -605,6 +777,84 @@ export async function getProfile(pubkey: string): Promise<{
     recentPosts,
     mentionCount: Number(mentionCountRow?.value ?? 0),
     mentionedPosts,
+  };
+}
+
+export async function votePostServer(input: VoteInput): Promise<{
+  postId: string;
+  voterPubkey: string;
+  value: -1 | 0 | 1;
+  upvotesCount: number;
+  downvotesCount: number;
+  likenessScore: number;
+}> {
+  const postId = (input.postId || "").trim();
+  if (!postId) throw new Error("Post id is required");
+
+  const voterPubkey = (input.voterPubkey || "").trim().toLowerCase();
+  if (!isValidPubkey(voterPubkey)) {
+    throw new Error("Invalid Ed25519 public key format (expected 64-char hex)");
+  }
+
+  const value = input.value;
+  if (value !== 1 && value !== -1 && value !== 0) {
+    throw new Error("Vote value must be 1 (more of this), -1 (less of this), or 0 (clear)");
+  }
+
+  const signature = (input.signature || "").trim().toLowerCase();
+  if (!signature) {
+    throw new Error("Cryptographic signature is required to vote");
+  }
+
+  const updatedAt = input.updatedAt || Date.now();
+  const canonicalMsg = buildVoteCanonicalMessage({ postId, value, updatedAt });
+  if (!verifyPayload(signature, canonicalMsg, voterPubkey)) {
+    throw new Error("Cryptographic signature verification failed for vote action");
+  }
+
+  const db = getDb();
+  const [post] = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
+  if (!post) throw new Error(`Post not found: ${postId}`);
+
+  if (value === 0) {
+    await db
+      .delete(votes)
+      .where(and(eq(votes.postId, postId), eq(votes.voterPubkey, voterPubkey)));
+  } else {
+    await db
+      .insert(votes)
+      .values({
+        postId,
+        voterPubkey,
+        value,
+        signature,
+        updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [votes.postId, votes.voterPubkey],
+        set: {
+          value,
+          signature,
+          updatedAt,
+        },
+      });
+  }
+
+  const [summaries, likenessScores] = await Promise.all([
+    voteSummariesFor([postId], voterPubkey),
+    personalizedScoresFor(voterPubkey, [post]),
+  ]);
+
+  const summary = summaries.get(postId);
+  const rawScore = likenessScores.get(postId) ?? 0;
+
+  return {
+    postId,
+    voterPubkey,
+    value,
+    upvotesCount: summary?.upvotes ?? 0,
+    downvotesCount: summary?.downvotes ?? 0,
+    likenessScore: Math.round(rawScore * 1000) / 1000,
   };
 }
 

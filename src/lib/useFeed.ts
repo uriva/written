@@ -19,6 +19,10 @@ interface ApiPost {
   replies?: ApiPost[];
   repliesCount?: number;
   parent?: ApiPost | null;
+  upvotesCount?: number;
+  downvotesCount?: number;
+  viewerVote?: 1 | -1 | 0;
+  likenessScore?: number;
 }
 
 export function mapApiPost(post: ApiPost): PostItem {
@@ -44,6 +48,10 @@ export function mapApiPost(post: ApiPost): PostItem {
     replies: (post.replies || []).map(mapApiPost),
     repliesCount: post.repliesCount ?? post.replies?.length ?? 0,
     parent: post.parent ? mapApiPost(post.parent) : null,
+    upvotesCount: post.upvotesCount ?? 0,
+    downvotesCount: post.downvotesCount ?? 0,
+    viewerVote: post.viewerVote ?? 0,
+    likenessScore: post.likenessScore ?? 0,
   };
 }
 
@@ -132,9 +140,14 @@ interface FeedPayload {
 const feedTransform = (payload: FeedPayload): PostItem[] =>
   (payload.posts || []).map(mapApiPost);
 
-export function useFeed(tag: string | null) {
+export function useFeed(
+  tag: string | null,
+  options?: { viewer?: string | null; rank?: "for-you" | "latest" }
+) {
   const params = new URLSearchParams({ limit: "100", topLevel: "true" });
   if (tag) params.set("tag", tag);
+  if (options?.viewer) params.set("viewer", options.viewer);
+  if (options?.rank) params.set("rank", options.rank);
   const url = `/api/posts?${params.toString()}`;
 
   const { data, isLoading, error, refresh } = useJsonPolling<PostItem[]>(
@@ -157,8 +170,9 @@ const threadTransform = (payload: any): ThreadPayload => ({
   grandParent: payload.grandParent ? mapApiPost(payload.grandParent) : null,
 });
 
-export function usePostThread(postId: string) {
-  const url = `/api/posts/${encodeURIComponent(postId)}`;
+export function usePostThread(postId: string, viewer?: string | null) {
+  const qs = viewer ? `?viewer=${encodeURIComponent(viewer)}` : "";
+  const url = `/api/posts/${encodeURIComponent(postId)}${qs}`;
   const { data, isLoading, error, refresh } = useJsonPolling<ThreadPayload>(
     url,
     threadTransform

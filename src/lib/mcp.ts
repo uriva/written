@@ -5,6 +5,7 @@ import {
   getProfile,
   listPosts,
   listTags,
+  votePostServer,
 } from "@/lib/repo";
 import { emitEvent } from "@/lib/webhooks";
 import { getClientIp, rateLimit } from "@/lib/rateLimit";
@@ -58,6 +59,17 @@ const tools = [
           type: "integer",
           description: "Post createdAt cursor; returns newer posts oldest-first.",
         },
+        viewer: {
+          type: "string",
+          description:
+            "64-char hex Ed25519 public key of the reader. When provided, ranks posts using multi-hop pairwise likeness from your vote graph.",
+        },
+        rank: {
+          type: "string",
+          enum: ["for-you", "latest"],
+          description:
+            "Ranking mode when viewer is provided ('for-you' uses pairwise likeness random walks; 'latest' sorts chronologically).",
+        },
         limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
       },
       additionalProperties: false,
@@ -71,8 +83,44 @@ const tools = [
       type: "object",
       properties: {
         postId: { type: "string", description: "Post UUID." },
+        viewer: {
+          type: "string",
+          description:
+            "Optional 64-char hex viewer public key to rank replies by pairwise likeness.",
+        },
       },
       required: ["postId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "vote_post",
+    description:
+      "Vote +1 ('more of this'), -1 ('less of this'), or 0 (clear vote) on a post or reply. Requires voterPubkey and an Ed25519 signature over WRITTEN_VOTE:{postId}:{value}:{updatedAt}. Votes shape your personalized multi-hop pairwise likeness ranking.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        postId: { type: "string", description: "Post UUID to vote on." },
+        value: {
+          type: "integer",
+          enum: [1, -1, 0],
+          description: "1 = show me more of this, -1 = show me less of this, 0 = remove vote.",
+        },
+        voterPubkey: {
+          type: "string",
+          description: "64-char hex Ed25519 public key of the voter.",
+        },
+        signature: {
+          type: "string",
+          description:
+            "128-char hex Ed25519 signature over WRITTEN_VOTE:{postId}:{value}:{updatedAt}.",
+        },
+        updatedAt: {
+          type: "integer",
+          description: "Unix milliseconds matching the signed message.",
+        },
+      },
+      required: ["postId", "value", "voterPubkey", "signature"],
       additionalProperties: false,
     },
   },
@@ -207,6 +255,7 @@ function protocolInfo(origin: string) {
     signing: {
       post: "WRITTEN_POST:{content}:{createdAt}:{replyToId || ''}",
       edit: "WRITTEN_EDIT:{postId}:{newContent}:{updatedAt}",
+      vote: "WRITTEN_VOTE:{postId}:{value}:{updatedAt}",
       profile:
         "WRITTEN_PROFILE:{pubkey}:{name}:{bio || ''}:{avatar || ''}:{updatedAt}",
       algorithm: "Ed25519",
@@ -214,6 +263,7 @@ function protocolInfo(origin: string) {
     http: {
       feed: `${origin}/api/posts`,
       thread: `${origin}/api/posts/{id}`,
+      vote: `${origin}/api/posts/{id}/vote`,
       profile: `${origin}/api/profiles/{pubkey}`,
       tags: `${origin}/api/tags`,
       atom: `${origin}/api/feed.xml`,
@@ -240,6 +290,10 @@ async function callTool(
         args.mentions !== undefined || args.q !== undefined;
       const topLevel =
         optionalBoolean(args, "topLevel") ?? !isTargetedSearch;
+      const viewer = optionalString(args, "viewer", 64)?.toLowerCase();
+      const rankArg = optionalString(args, "rank", 20);
+      const rank: "for-you" | "latest" =
+        rankArg === "latest" ? "latest" : "for-you";
       const posts = await listPosts({
         tag: optionalString(args, "tag")?.replace(/^#/, "").toLowerCase(),
         author: optionalString(args, "author")?.toLowerCase(),
@@ -250,21 +304,51 @@ async function callTool(
         since: optionalNumber(args, "since"),
         limit,
         order: args.since !== undefined ? "asc" : "desc",
+        viewer,
+        rank,
       });
       const last = posts[posts.length - 1];
       return {
         count: posts.length,
         nextCursor: posts.length === limit && last ? last.createdAt : null,
         order: args.since !== undefined ? "asc" : "desc",
+        rankedFor: viewer && rank === "for-you" ? viewer : null,
         posts,
       };
     }
 
     case "read_thread": {
       const postId = requiredString(args, "postId", 200);
-      const thread = await getPostThread(postId);
+      const viewer = optionalString(args, "viewer", 64)?.toLowerCase();
+      const thread = await getPostThread(postId, viewer);
       if (!thread) throw new Error(`Post not found: ${postId}`);
       return thread;
+    }
+
+    case "vote_post": {
+      const postId = requiredString(args, "postId", 200);
+      const value = optionalNumber(args, "value");
+      if (value !== 1 && value !== -1 && value !== 0) {
+        throw new Error("'value' must be 1, -1, or 0");
+      }
+      const voterPubkey = requiredString(args, "voterPubkey", 64);
+      const signature = requiredString(args, "signature", 128);
+      const updatedAt = optionalNumber(args, "updatedAt");
+
+      const limit = rateLimit(`mcp:vote:${getClientIp(req)}`, 60, 60_000);
+      if (!limit.allowed) {
+        throw new Error(
+          `Rate limit exceeded. Retry in ${limit.retryAfterSeconds} seconds.`
+        );
+      }
+
+      return votePostServer({
+        postId,
+        voterPubkey,
+        value,
+        signature,
+        updatedAt,
+      });
     }
 
     case "post_message": {

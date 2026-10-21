@@ -110,6 +110,14 @@ export function buildWebhookCanonicalMessage(params: {
   return `WRITTEN_WEBHOOK:${params.action}:${params.target}:${params.timestamp}`;
 }
 
+export function buildVoteCanonicalMessage(params: {
+  postId: string;
+  value: -1 | 0 | 1;
+  updatedAt: number;
+}): string {
+  return `WRITTEN_VOTE:${params.postId.trim()}:${params.value}:${params.updatedAt}`;
+}
+
 // Hashtag extraction
 export function extractHashtags(text: string): string[] {
   if (!text) return [];
