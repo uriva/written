@@ -80,8 +80,6 @@ export function PostCard({
   const [localStance, setLocalStance] = useState<"support" | "object" | "none" | null>(
     null
   );
-  const [supportDelta, setSupportDelta] = useState(0);
-  const [objectDelta, setObjectDelta] = useState(0);
   const [isStancing, setIsStancing] = useState(false);
 
   const effectiveVote: 1 | -1 | 0 = localVote ?? post.viewerVote ?? 0;
@@ -89,8 +87,19 @@ export function PostCard({
     localStance === "none"
       ? null
       : localStance ?? post.viewerStance ?? null;
-  const supportCount = Math.max(0, (post.supportCount ?? 0) + supportDelta);
-  const objectCount = Math.max(0, (post.objectCount ?? 0) + objectDelta);
+
+  const baseSupport =
+    (post.supportCount ?? 0) - (post.viewerStance === "support" ? 1 : 0);
+  const baseObject =
+    (post.objectCount ?? 0) - (post.viewerStance === "object" ? 1 : 0);
+  const supportCount = Math.max(
+    0,
+    baseSupport + (effectiveStance === "support" ? 1 : 0)
+  );
+  const objectCount = Math.max(
+    0,
+    baseObject + (effectiveStance === "object" ? 1 : 0)
+  );
 
   const handleVote = async (target: 1 | -1) => {
     if (!keypair) {
@@ -146,20 +155,8 @@ export function PostCard({
     const current = effectiveStance;
     const nextStance: "support" | "object" | "none" =
       current === target ? "none" : target;
-    const prevSupportDelta = supportDelta;
-    const prevObjectDelta = objectDelta;
 
     setLocalStance(nextStance);
-    setSupportDelta(
-      prevSupportDelta +
-        (nextStance === "support" ? 1 : 0) -
-        (current === "support" ? 1 : 0)
-    );
-    setObjectDelta(
-      prevObjectDelta +
-        (nextStance === "object" ? 1 : 0) -
-        (current === "object" ? 1 : 0)
-    );
     setIsStancing(true);
 
     try {
@@ -190,8 +187,6 @@ export function PostCard({
       onVoteChange?.();
     } catch (err: any) {
       setLocalStance(current ?? "none");
-      setSupportDelta(prevSupportDelta);
-      setObjectDelta(prevObjectDelta);
       toast.error(err?.message || "Failed to submit public stance");
     } finally {
       setIsStancing(false);
