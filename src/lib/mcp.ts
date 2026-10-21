@@ -5,6 +5,7 @@ import {
   getProfile,
   listPosts,
   listTags,
+  stancePostServer,
   votePostServer,
 } from "@/lib/repo";
 import { emitEvent } from "@/lib/webhooks";
@@ -96,7 +97,7 @@ const tools = [
   {
     name: "vote_post",
     description:
-      "Vote +1 ('more of this'), -1 ('less of this'), or 0 (clear vote) on a post or reply. Requires voterPubkey and an Ed25519 signature over WRITTEN_VOTE:{postId}:{value}:{updatedAt}. Votes shape your personalized multi-hop pairwise likeness ranking.",
+      "Private feed curation: vote +1 ('more like this'), -1 ('less like this'), or 0 (clear vote) on a post or reply. Votes are private (never displayed as public counts) and shape your personalized signed random-walk ranking. Requires voterPubkey and an Ed25519 signature over WRITTEN_VOTE:{postId}:{value}:{updatedAt}.",
     inputSchema: {
       type: "object",
       properties: {
@@ -104,7 +105,7 @@ const tools = [
         value: {
           type: "integer",
           enum: [1, -1, 0],
-          description: "1 = show me more of this, -1 = show me less of this, 0 = remove vote.",
+          description: "1 = show me more like this, -1 = show me less like this, 0 = remove vote.",
         },
         voterPubkey: {
           type: "string",
@@ -121,6 +122,37 @@ const tools = [
         },
       },
       required: ["postId", "value", "voterPubkey", "signature"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "express_stance",
+    description:
+      "Publicly sign support ('support'), objection ('object'), or clear ('none') on a post. Unlike vote_post (which is private feed curation), stances are public and display your identity alongside the post. Requires voterPubkey and an Ed25519 signature over WRITTEN_STANCE:{postId}:{stance}:{updatedAt}.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        postId: { type: "string", description: "Post UUID." },
+        stance: {
+          type: "string",
+          enum: ["support", "object", "none"],
+          description: "'support' = publicly express support, 'object' = publicly express objection, 'none' = clear.",
+        },
+        voterPubkey: {
+          type: "string",
+          description: "64-char hex Ed25519 public key.",
+        },
+        signature: {
+          type: "string",
+          description:
+            "128-char hex Ed25519 signature over WRITTEN_STANCE:{postId}:{stance}:{updatedAt}.",
+        },
+        updatedAt: {
+          type: "integer",
+          description: "Unix milliseconds matching the signed message.",
+        },
+      },
+      required: ["postId", "stance", "voterPubkey", "signature"],
       additionalProperties: false,
     },
   },
@@ -256,6 +288,7 @@ function protocolInfo(origin: string) {
       post: "WRITTEN_POST:{content}:{createdAt}:{replyToId || ''}",
       edit: "WRITTEN_EDIT:{postId}:{newContent}:{updatedAt}",
       vote: "WRITTEN_VOTE:{postId}:{value}:{updatedAt}",
+      stance: "WRITTEN_STANCE:{postId}:{stance}:{updatedAt}",
       profile:
         "WRITTEN_PROFILE:{pubkey}:{name}:{bio || ''}:{avatar || ''}:{updatedAt}",
       algorithm: "Ed25519",
@@ -264,6 +297,7 @@ function protocolInfo(origin: string) {
       feed: `${origin}/api/posts`,
       thread: `${origin}/api/posts/{id}`,
       vote: `${origin}/api/posts/{id}/vote`,
+      stance: `${origin}/api/posts/{id}/stance`,
       profile: `${origin}/api/profiles/{pubkey}`,
       tags: `${origin}/api/tags`,
       atom: `${origin}/api/feed.xml`,
@@ -346,6 +380,32 @@ async function callTool(
         postId,
         voterPubkey,
         value,
+        signature,
+        updatedAt,
+      });
+    }
+
+    case "express_stance": {
+      const postId = requiredString(args, "postId", 200);
+      const stance = requiredString(args, "stance", 20);
+      if (stance !== "support" && stance !== "object" && stance !== "none") {
+        throw new Error("'stance' must be 'support', 'object', or 'none'");
+      }
+      const voterPubkey = requiredString(args, "voterPubkey", 64);
+      const signature = requiredString(args, "signature", 128);
+      const updatedAt = optionalNumber(args, "updatedAt");
+
+      const limit = rateLimit(`mcp:stance:${getClientIp(req)}`, 60, 60_000);
+      if (!limit.allowed) {
+        throw new Error(
+          `Rate limit exceeded. Retry in ${limit.retryAfterSeconds} seconds.`
+        );
+      }
+
+      return stancePostServer({
+        postId,
+        voterPubkey,
+        stance,
         signature,
         updatedAt,
       });

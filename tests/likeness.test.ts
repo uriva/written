@@ -6,6 +6,7 @@ import {
   type VoteEdge,
 } from "../src/lib/likeness.ts";
 import {
+  buildStanceCanonicalMessage,
   buildVoteCanonicalMessage,
   generateKeyPair,
   signPayload,
@@ -16,7 +17,7 @@ const ALICE = "a".repeat(64);
 const BOB = "b".repeat(64);
 const CAROL = "c".repeat(64);
 
-test("buildVoteCanonicalMessage and Ed25519 signature verification", () => {
+test("buildVoteCanonicalMessage and buildStanceCanonicalMessage Ed25519 signature verification", () => {
   const kp = generateKeyPair();
   const msg = buildVoteCanonicalMessage({
     postId: "post-123",
@@ -30,6 +31,27 @@ test("buildVoteCanonicalMessage and Ed25519 signature verification", () => {
     verifyPayload(
       sig,
       buildVoteCanonicalMessage({ postId: "post-123", value: -1, updatedAt: 1700000000000 }),
+      kp.publicKey
+    ),
+    false
+  );
+
+  const stanceMsg = buildStanceCanonicalMessage({
+    postId: "post-123",
+    stance: "support",
+    updatedAt: 1700000000000,
+  });
+  assert.equal(stanceMsg, "WRITTEN_STANCE:post-123:support:1700000000000");
+  const stanceSig = signPayload(stanceMsg, kp.privateKey);
+  assert.equal(verifyPayload(stanceSig, stanceMsg, kp.publicKey), true);
+  assert.equal(
+    verifyPayload(
+      stanceSig,
+      buildStanceCanonicalMessage({
+        postId: "post-123",
+        stance: "object",
+        updatedAt: 1700000000000,
+      }),
       kp.publicKey
     ),
     false

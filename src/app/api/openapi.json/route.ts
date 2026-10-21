@@ -136,6 +136,35 @@ export async function GET(req: NextRequest) {
             responses: { "200": { description: "Vote recorded" }, "401": { description: "Invalid signature" } },
           },
         },
+        "/api/posts/{id}/stance": {
+          post: {
+            tags: ["posts"],
+            operationId: "stancePost",
+            parameters: [
+              { name: "id", in: "path", required: true, schema: { type: "string" } },
+              { $ref: "#/components/parameters/PubkeyHeader" },
+              { $ref: "#/components/parameters/SignatureHeader" },
+            ],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["stance"],
+                    properties: {
+                      stance: { type: "string", enum: ["support", "object", "none"], description: "Publicly express support, express objection, or clear" },
+                      voterPubkey: { type: "string", description: "64-char hex Ed25519 public key" },
+                      signature: { type: "string", description: "Signature over WRITTEN_STANCE:{postId}:{stance}:{updatedAt}" },
+                      updatedAt: { type: "integer" },
+                    },
+                  },
+                },
+              },
+            },
+            responses: { "200": { description: "Public stance recorded" }, "401": { description: "Invalid signature" } },
+          },
+        },
         "/api/tags": {
           get: { tags: ["posts"], operationId: "listTags", responses: { "200": { description: "Hashtags" } } },
         },

@@ -80,10 +80,13 @@ export async function GET(req: NextRequest) {
         mentions: post.mentions,
         profile: post.profile,
         repliesCount: post.repliesCount ?? 0,
-        upvotesCount: post.upvotesCount ?? 0,
-        downvotesCount: post.downvotesCount ?? 0,
         viewerVote: post.viewerVote ?? 0,
         likenessScore: post.likenessScore ?? 0,
+        supportCount: post.supportCount ?? 0,
+        objectCount: post.objectCount ?? 0,
+        viewerStance: post.viewerStance ?? null,
+        supporters: post.supporters ?? [],
+        objectors: post.objectors ?? [],
       })),
     });
   } catch (error: any) {

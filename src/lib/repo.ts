@@ -19,6 +19,7 @@ import { getDb } from "@/db";
 import {
   posts,
   profiles,
+  stances,
   tags,
   votes,
   type EditHistoryEntry,
@@ -27,6 +28,7 @@ import {
   buildEditCanonicalMessage,
   buildPostCanonicalMessage,
   buildProfileCanonicalMessage,
+  buildStanceCanonicalMessage,
   buildVoteCanonicalMessage,
   extractHashtags,
   isValidPubkey,
@@ -60,10 +62,13 @@ export interface PostDTO {
   replies?: PostDTO[];
   repliesCount?: number;
   parent?: PostDTO | null;
-  upvotesCount?: number;
-  downvotesCount?: number;
   viewerVote?: 1 | -1 | 0;
   likenessScore?: number;
+  supportCount?: number;
+  objectCount?: number;
+  viewerStance?: "support" | "object" | null;
+  supporters?: Array<{ pubkey: string; name: string | null }>;
+  objectors?: Array<{ pubkey: string; name: string | null }>;
 }
 
 export interface ProfileDTO {
@@ -120,6 +125,14 @@ export interface VoteInput {
   postId: string;
   voterPubkey: string;
   value: -1 | 0 | 1;
+  signature: string;
+  updatedAt?: number;
+}
+
+export interface StanceInput {
+  postId: string;
+  voterPubkey: string;
+  stance: "support" | "object" | "none";
   signature: string;
   updatedAt?: number;
 }
@@ -214,17 +227,47 @@ async function replyCountsFor(postIds: string[]): Promise<Map<string, number>> {
   );
 }
 
-interface VoteSummary {
-  upvotes: number;
-  downvotes: number;
-  viewerVote: 1 | -1 | 0;
-}
-
-async function voteSummariesFor(
+async function viewerVotesFor(
   postIds: string[],
   viewerPubkey?: string | null
-): Promise<Map<string, VoteSummary>> {
-  const result = new Map<string, VoteSummary>();
+): Promise<Map<string, 1 | -1 | 0>> {
+  const result = new Map<string, 1 | -1 | 0>();
+  const cleanViewer =
+    viewerPubkey && isValidPubkey(viewerPubkey) ? viewerPubkey.trim().toLowerCase() : null;
+  if (!postIds.length || !cleanViewer) return result;
+
+  try {
+    const rows = await getDb()
+      .select({
+        postId: votes.postId,
+        value: votes.value,
+      })
+      .from(votes)
+      .where(and(inArray(votes.postId, postIds), eq(votes.voterPubkey, cleanViewer)));
+
+    for (const row of rows) {
+      result.set(row.postId, row.value > 0 ? 1 : row.value < 0 ? -1 : 0);
+    }
+  } catch {
+    // Gracefully degrade if votes table is not yet migrated
+  }
+
+  return result;
+}
+
+interface StanceSummary {
+  supportCount: number;
+  objectCount: number;
+  viewerStance: "support" | "object" | null;
+  supporters: Array<{ pubkey: string; name: string | null }>;
+  objectors: Array<{ pubkey: string; name: string | null }>;
+}
+
+async function stanceSummariesFor(
+  postIds: string[],
+  viewerPubkey?: string | null
+): Promise<Map<string, StanceSummary>> {
+  const result = new Map<string, StanceSummary>();
   if (!postIds.length) return result;
 
   const cleanViewer =
@@ -233,27 +276,45 @@ async function voteSummariesFor(
   try {
     const rows = await getDb()
       .select({
-        postId: votes.postId,
-        voterPubkey: votes.voterPubkey,
-        value: votes.value,
+        postId: stances.postId,
+        voterPubkey: stances.voterPubkey,
+        stance: stances.stance,
       })
-      .from(votes)
-      .where(inArray(votes.postId, postIds));
+      .from(stances)
+      .where(inArray(stances.postId, postIds));
+
+    if (!rows.length) return result;
+
+    const stanceProfiles = await profilesByPubkeys(rows.map((r) => r.voterPubkey));
 
     for (const row of rows) {
       let summary = result.get(row.postId);
       if (!summary) {
-        summary = { upvotes: 0, downvotes: 0, viewerVote: 0 };
+        summary = {
+          supportCount: 0,
+          objectCount: 0,
+          viewerStance: null,
+          supporters: [],
+          objectors: [],
+        };
         result.set(row.postId, summary);
       }
-      if (row.value > 0) summary.upvotes += 1;
-      else if (row.value < 0) summary.downvotes += 1;
-      if (cleanViewer && row.voterPubkey.toLowerCase() === cleanViewer) {
-        summary.viewerVote = row.value > 0 ? 1 : row.value < 0 ? -1 : 0;
+      const pk = row.voterPubkey.toLowerCase();
+      const profName = stanceProfiles.get(pk)?.name ?? null;
+      if (row.stance === "support") {
+        summary.supportCount += 1;
+        summary.supporters.push({ pubkey: pk, name: profName });
+      } else if (row.stance === "object") {
+        summary.objectCount += 1;
+        summary.objectors.push({ pubkey: pk, name: profName });
+      }
+      if (cleanViewer && pk === cleanViewer) {
+        summary.viewerStance =
+          row.stance === "support" ? "support" : row.stance === "object" ? "object" : null;
       }
     }
   } catch {
-    // Gracefully degrade if votes table is not yet migrated
+    // Gracefully degrade if stances table is not yet migrated
   }
 
   return result;
@@ -371,22 +432,29 @@ export async function listPosts(params: ListPostsParams = {}): Promise<PostDTO[]
     .limit(limit);
 
   const postIds = rows.map((row) => row.id);
-  const [profileMap, replyMap, voteMap, likenessScores] = await Promise.all([
-    profilesByPubkeys(rows.map((row) => row.authorPubkey)),
-    replyCountsFor(postIds),
-    voteSummariesFor(postIds, cleanViewer),
-    cleanViewer ? personalizedScoresFor(cleanViewer, rows) : Promise.resolve(new Map<string, number>()),
-  ]);
+  const [profileMap, replyMap, viewerVoteMap, stanceMap, likenessScores] =
+    await Promise.all([
+      profilesByPubkeys(rows.map((row) => row.authorPubkey)),
+      replyCountsFor(postIds),
+      viewerVotesFor(postIds, cleanViewer),
+      stanceSummariesFor(postIds, cleanViewer),
+      cleanViewer
+        ? personalizedScoresFor(cleanViewer, rows)
+        : Promise.resolve(new Map<string, number>()),
+    ]);
 
   const dtos = rows.map((row) => {
-    const v = voteMap.get(row.id);
+    const st = stanceMap.get(row.id);
     const rawScore = likenessScores.get(row.id) ?? 0;
     return {
       ...toPostDTO(row, profileMap.get(row.authorPubkey ?? ""), replyMap.get(row.id) ?? 0),
-      upvotesCount: v?.upvotes ?? 0,
-      downvotesCount: v?.downvotes ?? 0,
-      viewerVote: v?.viewerVote ?? 0,
+      viewerVote: viewerVoteMap.get(row.id) ?? 0,
       likenessScore: Math.round(rawScore * 1000) / 1000,
+      supportCount: st?.supportCount ?? 0,
+      objectCount: st?.objectCount ?? 0,
+      viewerStance: st?.viewerStance ?? null,
+      supporters: st?.supporters ?? [],
+      objectors: st?.objectors ?? [],
     };
   });
 
@@ -424,22 +492,26 @@ export async function getPostThread(
     .orderBy(asc(posts.createdAt));
 
   const postIds = rows.map((row) => row.id);
-  const [profileMap, voteMap, likenessScores] = await Promise.all([
+  const [profileMap, viewerVoteMap, stanceMap, likenessScores] = await Promise.all([
     profilesByPubkeys(rows.map((row) => row.authorPubkey)),
-    voteSummariesFor(postIds, cleanViewer),
+    viewerVotesFor(postIds, cleanViewer),
+    stanceSummariesFor(postIds, cleanViewer),
     cleanViewer ? personalizedScoresFor(cleanViewer, rows) : Promise.resolve(new Map<string, number>()),
   ]);
   const byId = new Map<string, PostDTO>();
 
   for (const row of rows) {
-    const v = voteMap.get(row.id);
+    const st = stanceMap.get(row.id);
     const rawScore = likenessScores.get(row.id) ?? 0;
     byId.set(row.id, {
       ...toPostDTO(row, profileMap.get(row.authorPubkey ?? "")),
-      upvotesCount: v?.upvotes ?? 0,
-      downvotesCount: v?.downvotes ?? 0,
-      viewerVote: v?.viewerVote ?? 0,
+      viewerVote: viewerVoteMap.get(row.id) ?? 0,
       likenessScore: Math.round(rawScore * 1000) / 1000,
+      supportCount: st?.supportCount ?? 0,
+      objectCount: st?.objectCount ?? 0,
+      viewerStance: st?.viewerStance ?? null,
+      supporters: st?.supporters ?? [],
+      objectors: st?.objectors ?? [],
       replies: [],
     });
   }
@@ -784,8 +856,6 @@ export async function votePostServer(input: VoteInput): Promise<{
   postId: string;
   voterPubkey: string;
   value: -1 | 0 | 1;
-  upvotesCount: number;
-  downvotesCount: number;
   likenessScore: number;
 }> {
   const postId = (input.postId || "").trim();
@@ -840,21 +910,89 @@ export async function votePostServer(input: VoteInput): Promise<{
       });
   }
 
-  const [summaries, likenessScores] = await Promise.all([
-    voteSummariesFor([postId], voterPubkey),
-    personalizedScoresFor(voterPubkey, [post]),
-  ]);
-
-  const summary = summaries.get(postId);
+  const likenessScores = await personalizedScoresFor(voterPubkey, [post]);
   const rawScore = likenessScores.get(postId) ?? 0;
 
   return {
     postId,
     voterPubkey,
     value,
-    upvotesCount: summary?.upvotes ?? 0,
-    downvotesCount: summary?.downvotes ?? 0,
     likenessScore: Math.round(rawScore * 1000) / 1000,
+  };
+}
+
+export async function stancePostServer(input: StanceInput): Promise<{
+  postId: string;
+  voterPubkey: string;
+  stance: "support" | "object" | "none";
+  supportCount: number;
+  objectCount: number;
+  supporters: Array<{ pubkey: string; name: string | null }>;
+  objectors: Array<{ pubkey: string; name: string | null }>;
+}> {
+  const postId = (input.postId || "").trim();
+  if (!postId) throw new Error("Post id is required");
+
+  const voterPubkey = (input.voterPubkey || "").trim().toLowerCase();
+  if (!isValidPubkey(voterPubkey)) {
+    throw new Error("Invalid Ed25519 public key format (expected 64-char hex)");
+  }
+
+  const stance = input.stance;
+  if (stance !== "support" && stance !== "object" && stance !== "none") {
+    throw new Error("Stance must be 'support', 'object', or 'none'");
+  }
+
+  const signature = (input.signature || "").trim().toLowerCase();
+  if (!signature) {
+    throw new Error("Cryptographic signature is required to express public support or objection");
+  }
+
+  const updatedAt = input.updatedAt || Date.now();
+  const canonicalMsg = buildStanceCanonicalMessage({ postId, stance, updatedAt });
+  if (!verifyPayload(signature, canonicalMsg, voterPubkey)) {
+    throw new Error("Cryptographic signature verification failed for stance action");
+  }
+
+  const db = getDb();
+  const [post] = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
+  if (!post) throw new Error(`Post not found: ${postId}`);
+
+  if (stance === "none") {
+    await db
+      .delete(stances)
+      .where(and(eq(stances.postId, postId), eq(stances.voterPubkey, voterPubkey)));
+  } else {
+    await db
+      .insert(stances)
+      .values({
+        postId,
+        voterPubkey,
+        stance,
+        signature,
+        updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [stances.postId, stances.voterPubkey],
+        set: {
+          stance,
+          signature,
+          updatedAt,
+        },
+      });
+  }
+
+  const summaries = await stanceSummariesFor([postId], voterPubkey);
+  const summary = summaries.get(postId);
+
+  return {
+    postId,
+    voterPubkey,
+    stance,
+    supportCount: summary?.supportCount ?? 0,
+    objectCount: summary?.objectCount ?? 0,
+    supporters: summary?.supporters ?? [],
+    objectors: summary?.objectors ?? [],
   };
 }
 

@@ -19,10 +19,13 @@ interface ApiPost {
   replies?: ApiPost[];
   repliesCount?: number;
   parent?: ApiPost | null;
-  upvotesCount?: number;
-  downvotesCount?: number;
   viewerVote?: 1 | -1 | 0;
   likenessScore?: number;
+  supportCount?: number;
+  objectCount?: number;
+  viewerStance?: "support" | "object" | null;
+  supporters?: Array<{ pubkey: string; name: string | null }>;
+  objectors?: Array<{ pubkey: string; name: string | null }>;
 }
 
 export function mapApiPost(post: ApiPost): PostItem {
@@ -48,10 +51,13 @@ export function mapApiPost(post: ApiPost): PostItem {
     replies: (post.replies || []).map(mapApiPost),
     repliesCount: post.repliesCount ?? post.replies?.length ?? 0,
     parent: post.parent ? mapApiPost(post.parent) : null,
-    upvotesCount: post.upvotesCount ?? 0,
-    downvotesCount: post.downvotesCount ?? 0,
     viewerVote: post.viewerVote ?? 0,
     likenessScore: post.likenessScore ?? 0,
+    supportCount: post.supportCount ?? 0,
+    objectCount: post.objectCount ?? 0,
+    viewerStance: post.viewerStance ?? null,
+    supporters: Array.isArray(post.supporters) ? post.supporters : [],
+    objectors: Array.isArray(post.objectors) ? post.objectors : [],
   };
 }
 

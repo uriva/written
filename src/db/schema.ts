@@ -131,3 +131,19 @@ export const votes = pgTable(
     index("votes_updated_at_idx").on(table.updatedAt),
   ]
 );
+
+export const stances = pgTable(
+  "stances",
+  {
+    postId: text("post_id").notNull(),
+    voterPubkey: text("voter_pubkey").notNull(),
+    stance: text("stance").notNull(), // "support" | "object"
+    signature: text("signature").notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.postId, table.voterPubkey] }),
+    index("stances_post_idx").on(table.postId),
+    index("stances_voter_idx").on(table.voterPubkey),
+  ]
+);

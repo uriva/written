@@ -4,7 +4,11 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { formatTimeAgo } from "@/lib/utils";
 import { useIdentity } from "@/lib/useIdentity";
-import { buildVoteCanonicalMessage, signPayload } from "@/lib/crypto";
+import {
+  buildStanceCanonicalMessage,
+  buildVoteCanonicalMessage,
+  signPayload,
+} from "@/lib/crypto";
 import { pubkeyToFriendlyName, getAuthorInitials } from "@/lib/nameGenerator";
 import { MENTION_REGEX_SOURCE, formatMention } from "@/lib/mentions";
 import {
@@ -13,8 +17,8 @@ import {
   CornerDownRight,
   ChevronRight,
   CheckCircle2,
-  ThumbsUp,
-  ThumbsDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,10 +43,13 @@ export interface PostItem {
   replies?: any[];
   repliesCount?: number;
   parent?: any;
-  upvotesCount?: number;
-  downvotesCount?: number;
   viewerVote?: 1 | -1 | 0;
   likenessScore?: number;
+  supportCount?: number;
+  objectCount?: number;
+  viewerStance?: "support" | "object" | null;
+  supporters?: Array<{ pubkey: string; name: string | null }>;
+  objectors?: Array<{ pubkey: string; name: string | null }>;
 }
 
 interface PostCardProps {
@@ -68,29 +75,34 @@ export function PostCard({
 }: PostCardProps) {
   const { keypair } = useIdentity();
   const [localVote, setLocalVote] = useState<1 | -1 | 0 | null>(null);
-  const [upDelta, setUpDelta] = useState(0);
-  const [downDelta, setDownDelta] = useState(0);
   const [isVoting, setIsVoting] = useState(false);
 
+  const [localStance, setLocalStance] = useState<"support" | "object" | "none" | null>(
+    null
+  );
+  const [supportDelta, setSupportDelta] = useState(0);
+  const [objectDelta, setObjectDelta] = useState(0);
+  const [isStancing, setIsStancing] = useState(false);
+
   const effectiveVote: 1 | -1 | 0 = localVote ?? post.viewerVote ?? 0;
-  const upvotesCount = Math.max(0, (post.upvotesCount ?? 0) + upDelta);
-  const downvotesCount = Math.max(0, (post.downvotesCount ?? 0) + downDelta);
+  const effectiveStance: "support" | "object" | null =
+    localStance === "none"
+      ? null
+      : localStance ?? post.viewerStance ?? null;
+  const supportCount = Math.max(0, (post.supportCount ?? 0) + supportDelta);
+  const objectCount = Math.max(0, (post.objectCount ?? 0) + objectDelta);
 
   const handleVote = async (target: 1 | -1) => {
     if (!keypair) {
-      toast.error("Generate or import a key in Settings to vote");
+      toast.error("Generate or import a key in Settings to tune your feed");
       return;
     }
     if (isVoting) return;
 
     const current = effectiveVote;
     const nextValue: -1 | 0 | 1 = current === target ? 0 : target;
-    const prevUpDelta = upDelta;
-    const prevDownDelta = downDelta;
 
     setLocalVote(nextValue);
-    setUpDelta(prevUpDelta + (nextValue === 1 ? 1 : 0) - (current === 1 ? 1 : 0));
-    setDownDelta(prevDownDelta + (nextValue === -1 ? 1 : 0) - (current === -1 ? 1 : 0));
     setIsVoting(true);
 
     try {
@@ -118,11 +130,71 @@ export function PostCard({
       onVoteChange?.();
     } catch (err: any) {
       setLocalVote(current);
-      setUpDelta(prevUpDelta);
-      setDownDelta(prevDownDelta);
       toast.error(err?.message || "Failed to submit vote");
     } finally {
       setIsVoting(false);
+    }
+  };
+
+  const handleStance = async (target: "support" | "object") => {
+    if (!keypair) {
+      toast.error("Generate or import a key in Settings to sign a public stance");
+      return;
+    }
+    if (isStancing) return;
+
+    const current = effectiveStance;
+    const nextStance: "support" | "object" | "none" =
+      current === target ? "none" : target;
+    const prevSupportDelta = supportDelta;
+    const prevObjectDelta = objectDelta;
+
+    setLocalStance(nextStance);
+    setSupportDelta(
+      prevSupportDelta +
+        (nextStance === "support" ? 1 : 0) -
+        (current === "support" ? 1 : 0)
+    );
+    setObjectDelta(
+      prevObjectDelta +
+        (nextStance === "object" ? 1 : 0) -
+        (current === "object" ? 1 : 0)
+    );
+    setIsStancing(true);
+
+    try {
+      const updatedAt = Date.now();
+      const canonical = buildStanceCanonicalMessage({
+        postId: post.id,
+        stance: nextStance,
+        updatedAt,
+      });
+      const signature = signPayload(canonical, keypair.privateKey);
+      const res = await fetch(
+        `/api/posts/${encodeURIComponent(post.id)}/stance`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            voterPubkey: keypair.publicKey,
+            stance: nextStance,
+            updatedAt,
+            signature,
+          }),
+        }
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || "Stance failed");
+      }
+      onVoteChange?.();
+    } catch (err: any) {
+      setLocalStance(current ?? "none");
+      setSupportDelta(prevSupportDelta);
+      setObjectDelta(prevObjectDelta);
+      toast.error(err?.message || "Failed to submit public stance");
+    } finally {
+      setIsStancing(false);
     }
   };
 
@@ -338,43 +410,47 @@ export function PostCard({
       </div>
 
       {/* Actions Bar */}
-      <div className="flex items-center justify-between pt-2.5 border-t border-neutral-100 dark:border-neutral-900 text-xs text-neutral-500">
-        <div className="flex items-center gap-5">
-          {/* Upvote: More of this */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleVote(1);
-            }}
-            className={`flex items-center gap-1 transition-colors ${
-              effectiveVote === 1
-                ? "text-black dark:text-white font-semibold"
-                : "hover:text-black dark:hover:text-white"
-            }`}
-            title="Show me more like this (+1)"
+      <div className="flex flex-wrap items-center justify-between gap-y-2 pt-2.5 border-t border-neutral-100 dark:border-neutral-900 text-xs text-neutral-500">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Private Curation: More / Less like this */}
+          <div
+            className="inline-flex items-center border border-neutral-200 dark:border-neutral-800 divide-x divide-neutral-200 dark:divide-neutral-800"
+            title="Private feed curation: only your own choice is visible to you; used for signed random-walk ranking"
           >
-            <ThumbsUp className="w-3.5 h-3.5" />
-            {upvotesCount > 0 && <span className="text-xs">{upvotesCount}</span>}
-          </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleVote(1);
+              }}
+              className={`flex items-center gap-1 px-2 py-1 text-[11px] transition-colors ${
+                effectiveVote === 1
+                  ? "bg-black text-white dark:bg-white dark:text-black font-semibold"
+                  : "text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white"
+              }`}
+              title="Private: show me more like this"
+            >
+              <ArrowUp className="w-3 h-3" />
+              <span>More like this</span>
+            </button>
 
-          {/* Downvote: Less of this */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleVote(-1);
-            }}
-            className={`flex items-center gap-1 transition-colors ${
-              effectiveVote === -1
-                ? "text-black dark:text-white font-semibold"
-                : "hover:text-black dark:hover:text-white"
-            }`}
-            title="Show me less like this (-1)"
-          >
-            <ThumbsDown className="w-3.5 h-3.5" />
-            {downvotesCount > 0 && <span className="text-xs">{downvotesCount}</span>}
-          </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleVote(-1);
+              }}
+              className={`flex items-center gap-1 px-2 py-1 text-[11px] transition-colors ${
+                effectiveVote === -1
+                  ? "bg-black text-white dark:bg-white dark:text-black font-semibold"
+                  : "text-neutral-600 dark:text-neutral-400 hover:text-black dark:hover:text-white"
+              }`}
+              title="Private: show me less like this"
+            >
+              <ArrowDown className="w-3 h-3" />
+              <span>Less like this</span>
+            </button>
+          </div>
 
           {onReply && (
             <button
@@ -386,7 +462,7 @@ export function PostCard({
               className="flex items-center gap-1.5 hover:text-black dark:hover:text-white transition-colors"
               title="Reply"
             >
-              <MessageCircle className="w-4 h-4" />
+              <MessageCircle className="w-3.5 h-3.5" />
               {repliesCount > 0 && <span className="text-xs">{repliesCount}</span>}
             </button>
           )}
@@ -406,16 +482,65 @@ export function PostCard({
           )}
         </div>
 
-        {!isThreadView && (
-          <Link
-            href={`/post/${post.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="hover:text-black dark:hover:text-white transition-colors p-1"
-            title="View thread"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </Link>
-        )}
+        {/* Less prominent Public Stance: Express support / Express objection */}
+        <div className="flex items-center gap-2.5 ml-auto">
+          <div className="flex items-center gap-2 font-mono text-[11px] text-neutral-400">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleStance("support");
+              }}
+              className={`transition-colors ${
+                effectiveStance === "support"
+                  ? "text-emerald-600 dark:text-emerald-400 font-semibold underline underline-offset-2"
+                  : "hover:text-neutral-700 dark:hover:text-neutral-200"
+              }`}
+              title={
+                post.supporters && post.supporters.length > 0
+                  ? `Publicly supported by: ${post.supporters
+                      .map((s) => s.name || pubkeyToFriendlyName(s.pubkey))
+                      .join(", ")}`
+                  : "Publicly sign support with your key (visible to everyone)"
+              }
+            >
+              express support{supportCount > 0 ? ` (${supportCount})` : ""}
+            </button>
+            <span className="text-neutral-300 dark:text-neutral-700">/</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleStance("object");
+              }}
+              className={`transition-colors ${
+                effectiveStance === "object"
+                  ? "text-rose-600 dark:text-rose-400 font-semibold underline underline-offset-2"
+                  : "hover:text-neutral-700 dark:hover:text-neutral-200"
+              }`}
+              title={
+                post.objectors && post.objectors.length > 0
+                  ? `Publicly objected by: ${post.objectors
+                      .map((s) => s.name || pubkeyToFriendlyName(s.pubkey))
+                      .join(", ")}`
+                  : "Publicly sign objection with your key (visible to everyone)"
+              }
+            >
+              express objection{objectCount > 0 ? ` (${objectCount})` : ""}
+            </button>
+          </div>
+
+          {!isThreadView && (
+            <Link
+              href={`/post/${post.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="hover:text-black dark:hover:text-white transition-colors p-1"
+              title="View thread"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          )}
+        </div>
       </div>
     </article>
   );

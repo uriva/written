@@ -118,6 +118,14 @@ export function buildVoteCanonicalMessage(params: {
   return `WRITTEN_VOTE:${params.postId.trim()}:${params.value}:${params.updatedAt}`;
 }
 
+export function buildStanceCanonicalMessage(params: {
+  postId: string;
+  stance: "support" | "object" | "none";
+  updatedAt: number;
+}): string {
+  return `WRITTEN_STANCE:${params.postId.trim()}:${params.stance}:${params.updatedAt}`;
+}
+
 // Hashtag extraction
 export function extractHashtags(text: string): string[] {
   if (!text) return [];
