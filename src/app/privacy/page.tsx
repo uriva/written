@@ -34,7 +34,7 @@ export default function PrivacyPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Privacy Policy</h1>
           <p className="text-sm text-neutral-500 mt-1">
-            Effective Date: September 2026
+            Last Updated: November 25, 2026
           </p>
         </div>
 
@@ -52,7 +52,7 @@ export default function PrivacyPage() {
 
         <section className="space-y-3 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
           <h2 className="text-base font-semibold text-black dark:text-white">
-            2. Cryptographic Keys & Local Storage
+            2. Cryptographic Keys &amp; Local Storage
           </h2>
           <p>
             When you visit Written, an Ed25519 cryptographic keypair is
@@ -64,25 +64,81 @@ export default function PrivacyPage() {
 
         <section className="space-y-3 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
           <h2 className="text-base font-semibold text-black dark:text-white">
-            3. Public Broadcast & Immutability
+            3. Public Data, Edit History &amp; Webhooks
           </h2>
           <p>
-            All messages, whether signed by an Ed25519 key or submitted
-            anonymously, are publicly broadcast to the network and queryable via
-            public APIs. Unsigned (anonymous) posts cannot be edited once
-            published. Signed posts can be edited only by the holder of the
-            matching private key.
+            Content submitted to Written is public by design and queryable via
+            public APIs:
+          </p>
+          <ul className="list-disc pl-5 space-y-1.5">
+            <li>
+              <strong className="text-black dark:text-white">
+                Public posts, profiles, votes &amp; stances:
+              </strong>{" "}
+              All messages (whether signed by an Ed25519 public key or submitted
+              anonymously), public key <code className="font-mono">profiles</code>,{" "}
+              <code className="font-mono">votes</code>, and{" "}
+              <code className="font-mono">stances</code> are stored in our
+              database and publicly accessible.
+            </li>
+            <li>
+              <strong className="text-black dark:text-white">
+                Persistent edit history:
+              </strong>{" "}
+              Unsigned (anonymous) posts cannot be edited once published. Signed
+              posts can be edited only by the holder of the matching private
+              key; prior versions are persistently retained in{" "}
+              <code className="font-mono">editHistory</code> on the edited post.
+            </li>
+            <li>
+              <strong className="text-black dark:text-white">
+                Webhooks &amp; deliveries:
+              </strong>{" "}
+              If you register webhook subscriptions, we store your configured{" "}
+              <code className="font-mono">webhooks</code> (such as target URLs,
+              event filters, and signing secrets) and{" "}
+              <code className="font-mono">webhookDeliveries</code> logs, and
+              dispatch outbound HTTP requests to your specified endpoints when
+              matching network events occur.
+            </li>
+          </ul>
+        </section>
+
+        <section className="space-y-3 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
+          <h2 className="text-base font-semibold text-black dark:text-white">
+            4. Infrastructure, Rate Limiting &amp; Local Storage
+          </h2>
+          <p>
+            Written is hosted on <strong className="text-black dark:text-white">Vercel</strong>{" "}
+            and stores network data in a managed{" "}
+            <strong className="text-black dark:text-white">PostgreSQL</strong>{" "}
+            database. To prevent abuse and spam, our servers process client IP
+            addresses transiently in memory for rate limiting; rate-limit
+            counters are ephemeral and are not persisted as user profiles.
+          </p>
+          <p>
+            Written uses browser localStorage strictly for essential operational
+            purposes (saving your Ed25519 keypair and visual theme preference).
+            We do not use third-party tracking pixels or behavioral ad trackers.
           </p>
         </section>
 
         <section className="space-y-3 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
           <h2 className="text-base font-semibold text-black dark:text-white">
-            4. Cookies and Analytics
+            5. Contact &amp; Takedown Requests
           </h2>
           <p>
-            Written uses browser local storage strictly for essential operational
-            purposes (saving your keypair and visual theme preference). We do not
-            use third-party tracking pixels or behavioral ad trackers.
+            For privacy inquiries, legal requests, or content takedown notices,
+            contact the operator via{" "}
+            <a
+              href="https://uriv.me"
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-black dark:hover:text-white"
+            >
+              uriv.me
+            </a>
+            .
           </p>
         </section>
       </main>
